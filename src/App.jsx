@@ -141,6 +141,12 @@ const handleAddStudent = async () => {
   }
 
   try {
+    // Firebase Authentication에 사용자 생성
+    const email = `${newStudent.id}@student.com`;
+    const { createUserWithEmailAndPassword } = await import('firebase/auth');
+    await createUserWithEmailAndPassword(auth, email, newStudent.password);
+    
+    // Firestore에 학생 정보 저장
     await addDoc(collection(db, 'students'), {
       name: newStudent.name,
       grade: newStudent.grade,
