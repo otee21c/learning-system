@@ -4,12 +4,12 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCH26rhHE0JqmHAVPtDuV7boZFGRiv02SY",
-  authDomain: "learning-system-f5bdf.firebaseapp.com",
-  projectId: "learning-system-f5bdf",
-  storageBucket: "learning-system-f5bdf.firebasestorage.app",
-  messagingSenderId: "306626548155",
-  appId: "1:306626548155:web:a80779f7c60ef23c8d749e"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
