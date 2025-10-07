@@ -1,3 +1,4 @@
+import HomeworkManager from './components/HomeworkManager';
 import React, { useState, useEffect } from 'react';
 import { Upload, Video, FileText, User, LogOut, CheckCircle, XCircle, Edit2 } from 'lucide-react';
 import './index.css';
@@ -685,6 +686,16 @@ const handleLogout = async () => {
               일괄 채점
             </button>
             <button
+  onClick={() => setActiveTab('homework')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'homework' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  📚 숙제 관리
+</button>
+            <button
               onClick={() => setActiveTab('stats')}
               className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
                 activeTab === 'stats' 
@@ -1167,6 +1178,8 @@ const handleLogout = async () => {
             </div>
           )}
 
+          {activeTab === 'homework' && <HomeworkManager />}
+          
           {activeTab === 'stats' && (
             <div className="space-y-6">
               <div className="bg-white rounded-2xl shadow-lg p-8">
