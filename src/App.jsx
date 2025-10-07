@@ -55,17 +55,6 @@ export default function App() {
   const [studentAnswers, setStudentAnswers] = useState([]);
   const [selectedExam, setSelectedExam] = useState(null);
   const [examResult, setExamResult] = useState(null);
-  const [omrImage, setOmrImage] = useState(null);
-  const [assignments, setAssignments] = useState([]);
-const [newAssignment, setNewAssignment] = useState({
-  title: '',
-  description: '',
-  dueDate: '',
-  subject: '국어'
-});
-const [submissions, setSubmissions] = useState([]);
-  const [recognizedAnswers, setRecognizedAnswers] = useState([]);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [editingExam, setEditingExam] = useState(null);
   
   const [batchGrading, setBatchGrading] = useState({
@@ -98,21 +87,9 @@ useEffect(() => {
     }
   });
 
-// 과제 데이터 로드
-  const assignmentsRef = collection(db, 'assignments');
-  const unsubscribeAssignments = onSnapshot(assignmentsRef, (snapshot) => {
-    const assignmentsData = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-    if (assignmentsData.length > 0) {
-      setAssignments(assignmentsData);
-    }
-  });
   return () => {
     unsubscribeStudents();
     unsubscribeExams();
-    unsubscribeAssignments();
   };
 }, []);
 
@@ -256,34 +233,6 @@ const handleAddExam = async () => {
       scores: Array(40).fill(2),
       types: Array(40).fill('사실적 이해')
     });
-  
-  const handleAddAssignment = async () => {
-  if (!newAssignment.title || !newAssignment.dueDate) {
-    alert('과제명과 마감일을 입력해주세요.');
-    return;
-  }
-
-  try {
-    await addDoc(collection(db, 'assignments'), {
-      title: newAssignment.title,
-      description: newAssignment.description,
-      dueDate: newAssignment.dueDate,
-      subject: newAssignment.subject,
-      createdAt: new Date().toISOString()
-    });
-
-    setNewAssignment({
-      title: '',
-      description: '',
-      dueDate: '',
-      subject: '국어'
-    });
-    
-    alert('과제가 추가되었습니다.');
-  } catch (error) {
-    alert('과제 추가 실패: ' + error.message);
-  }
-};
     
     alert('시험이 추가되었습니다.');
   } catch (error) {
@@ -432,42 +381,6 @@ const handleDeleteExam = async (examId) => {
   }
 } 
   };
-
-  const handleOMRUpload = async (file) => {
-  if (!file) return;
-  
-  setIsProcessing(true);
-  
-  // 이미지 미리보기
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    setOmrImage(e.target.result);
-  };
-  reader.readAsDataURL(file);
-  
-  try {
-    // Tesseract.js로 OMR 인식
-    const { createWorker } = await import('tesseract.js');
-    const worker = await createWorker('kor');
-    
-    // 이미지에서 텍스트 인식 (테스트)
-    const { data: { text } } = await worker.recognize(file);
-    console.log('인식된 텍스트:', text);
-    
-    // 임시: 기본 답안 배열 생성
-    const answers = Array(selectedExam.totalQuestions).fill('');
-    setRecognizedAnswers(answers);
-    setStudentAnswers(answers);
-    
-    await worker.terminate();
-    alert('OMR 이미지가 업로드되었습니다. 답안을 확인하고 수정하세요.');
-  } catch (error) {
-    console.error('OMR 인식 실패:', error);
-    alert('OMR 인식에 실패했습니다: ' + error.message);
-  } finally {
-    setIsProcessing(false);
-  }
-};
 
 const handleLogout = async () => {
   try {
@@ -771,16 +684,6 @@ const handleLogout = async () => {
             >
               일괄 채점
             </button>
-            <button
-  onClick={() => setActiveTab('homework')}
-  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-    activeTab === 'homework'
-      ? 'bg-gradient-to-r from-green-600 to-teal-600 text-white shadow-lg transform scale-105'
-      : 'text-gray-700 hover:bg-gray-100'
-  }`}
->
-  숙제 관리
-</button>
             <button
               onClick={() => setActiveTab('stats')}
               className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
@@ -1306,86 +1209,6 @@ const handleLogout = async () => {
                   </div>
                 )}
 
-                {activeTab === 'homework' && (
-  <div className="space-y-6">
-    {/* 과제 추가 폼 */}
-    <div className="bg-white rounded-2xl shadow-lg p-8">
-      <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
-        새 과제 추가
-      </h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input
-          type="text"
-          placeholder="과제명"
-          value={newAssignment.title}
-          onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}
-          className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        />
-        
-        <select
-          value={newAssignment.subject}
-          onChange={(e) => setNewAssignment({...newAssignment, subject: e.target.value})}
-          className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        >
-          <option value="국어">국어</option>
-          <option value="영어">영어</option>
-          <option value="수학">수학</option>
-          <option value="과학">과학</option>
-          <option value="사회">사회</option>
-        </select>
-        
-        <input
-          type="date"
-          value={newAssignment.dueDate}
-          onChange={(e) => setNewAssignment({...newAssignment, dueDate: e.target.value})}
-          className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        />
-      </div>
-      
-      <textarea
-        placeholder="과제 설명"
-        value={newAssignment.description}
-        onChange={(e) => setNewAssignment({...newAssignment, description: e.target.value})}
-        className="w-full p-3 border border-gray-300 rounded-lg mt-4 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-        rows="3"
-      />
-      
-      <button
-        onClick={handleAddAssignment}
-        className="mt-4 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all"
-      >
-        과제 추가
-      </button>
-    </div>
-
-    {/* 과제 목록 */}
-    <div className="bg-white rounded-2xl shadow-lg p-8">
-      <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-green-600 to-teal-600 bg-clip-text text-transparent">
-        과제 목록
-      </h2>
-      
-      {assignments.length === 0 ? (
-        <p className="text-gray-500 text-center py-8">등록된 과제가 없습니다.</p>
-      ) : (
-        <div className="space-y-4">
-          {assignments.map((assignment) => (
-            <div key={assignment.id} className="border-2 border-gray-200 rounded-xl p-6 hover:border-green-400 transition-all">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-800">{assignment.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{assignment.subject} | 마감일: {assignment.dueDate}</p>
-                  {assignment.description && (
-                    <p className="text-gray-700 mt-2">{assignment.description}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-)}
-
-{activeTab === 'students' && (
                 <div className="space-y-6">
                   {students.map((student) => (
                     <div key={student.id} className="border-2 border-gray-200 rounded-2xl p-6 bg-gradient-to-r from-gray-50 to-purple-50">
@@ -1475,8 +1298,14 @@ const handleLogout = async () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
           )}
-        
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
@@ -1567,28 +1396,6 @@ const handleLogout = async () => {
                       </div>
                     </button>
                   ))}
-                  {selectedExam && !examResult && (
-            <div className="bg-white rounded-2xl shadow-lg p-8 mt-6">
-              <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                OMR 자동 채점
-              </h2>
-              
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleOMRUpload(e.target.files[0])}
-                  className="hidden"
-                  id="omr-upload"
-                />
-                <label htmlFor="omr-upload" className="cursor-pointer">
-                  <div className="text-6xl mb-4">📄</div>
-                  <p className="text-lg font-semibold text-gray-700">OMR 이미지 업로드</p>
-                  <p className="text-sm text-gray-500 mt-2">클릭하거나 파일을 드래그하세요</p>
-                </label>
-              </div>
-            </div>
-          )}
                 </div>
               </div>
             ) : examResult ? (
@@ -1851,7 +1658,6 @@ const handleLogout = async () => {
           </div>
         )}
       </div>
-    </div>
     </div>
   );
 }
