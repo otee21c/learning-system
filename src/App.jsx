@@ -1,4 +1,5 @@
 import HomeworkManager from './components/HomeworkManager';
+import HomeworkSubmission from './components/HomeworkSubmission';
 import React, { useState, useEffect } from 'react';
 import { Upload, Video, FileText, User, LogOut, CheckCircle, XCircle, Edit2 } from 'lucide-react';
 import './index.css';
@@ -97,13 +98,31 @@ useEffect(() => {
   // 시험 데이터 로드
   const handleLogin = async (e) => {
   e.preventDefault();
+  
+  // 관리자 로그인 체크 (Firebase Auth 없이)
+  if (loginForm.id === 'admin' && loginForm.password === 'admin123') {
+    setCurrentUser({ type: 'admin', name: '관리자' });
+    setActiveTab('students');
+    return;
+  }
+  
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, loginForm.id, loginForm.password);
+    // 학생 ID를 이메일 형식으로 변환
+    const email = loginForm.id.includes('@') 
+      ? loginForm.id 
+      : `${loginForm.id}@student.com`;
+    
+    const userCredential = await signInWithEmailAndPassword(auth, email, loginForm.password);
     
     // Firestore에서 학생인지 확인
     const studentsRef = collection(db, 'students');
     const snapshot = await getDocs(studentsRef);
-    const studentDoc = snapshot.docs.find(doc => doc.data().id === loginForm.id.split('@')[0]);
+
+    // @ 앞부분만 추출해서 비교
+    const userId = loginForm.id.includes('@') 
+      ? loginForm.id.split('@')[0] 
+      : loginForm.id;
+    const studentDoc = snapshot.docs.find(doc => doc.data().id === userId);
     
     if (studentDoc) {
       const studentData = studentDoc.data();
@@ -1179,7 +1198,7 @@ const handleLogout = async () => {
           )}
 
           {activeTab === 'homework' && <HomeworkManager />}
-          
+
           {activeTab === 'stats' && (
             <div className="space-y-6">
               <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -1370,15 +1389,25 @@ const handleLogout = async () => {
             OMR 채점
           </button>
           <button
-            onClick={() => setActiveTab('mypage')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-              activeTab === 'mypage' 
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            내 성적
-          </button>
+  onClick={() => setActiveTab('homework')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'homework' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  📝 숙제 제출
+</button>
+<button
+  onClick={() => setActiveTab('mypage')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'mypage' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  내 성적
+</button>
         </div>
 
         {activeTab === 'omr' && (
@@ -1552,6 +1581,8 @@ const handleLogout = async () => {
             )}
           </div>
         )}
+
+        {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} />}
 
         {activeTab === 'mypage' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">
