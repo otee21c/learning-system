@@ -58,7 +58,10 @@ export default function App() {
   const [selectedExam, setSelectedExam] = useState(null);
   const [examResult, setExamResult] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
-  
+  const [problemImage, setProblemImage] = useState(null);
+  const [problemImagePreview, setProblemImagePreview] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState(null);
   const [batchGrading, setBatchGrading] = useState({
     selectedExam: null,
     omrList: []
@@ -76,6 +79,37 @@ useEffect(() => {
       setStudents(studentsData);
     }
   });
+
+  // 이미지 선택 핸들러
+const handleProblemImageSelect = (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    setProblemImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProblemImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+// 분석 리셋
+const resetAnalysis = () => {
+  setProblemImage(null);
+  setProblemImagePreview(null);
+  setAnalysisResult(null);
+  setAnalyzing(false);
+};
+
+// 문제 분석 함수
+const analyzeProblem = async () => {
+  setAnalyzing(true);
+  // AI 분석 로직 (나중에 구현)
+  setTimeout(() => {
+    alert('AI 분석 기능 준비 중!');
+    setAnalyzing(false);
+  }, 2000);
+};
 
   // 시험 데이터 로드
   const examsRef = collection(db, 'exams');
@@ -311,6 +345,92 @@ const handleDeleteExam = async (examId) => {
 
     return feedback;
   };
+
+  // 문제 분석 관련 함수들
+const handleProblemImageSelect = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  setProblemImage(file);
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    setProblemImagePreview(reader.result);
+  };
+  reader.readAsDataURL(file);
+};
+
+const analyzeProblem = async () => {
+  if (!problemImage) {
+    alert('문제 사진을 선택해주세요!');
+    return;
+  }
+
+  setAnalyzing(true);
+  setAnalysisResult(null);
+
+  try {
+    const openai = new OpenAI({
+      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+      dangerouslyAllowBrowser: true
+    });
+
+    const base64Image = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(problemImage);
+    });
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `당신은 친절하고 전문적인 선생님입니다.
+          학생이 틀린 문제나 어려워하는 문제의 사진을 보내면:
+          1. 문제 내용 파악
+          2. 문제 유형 분석
+          3. 정답과 풀이 과정 설명
+          4. 핵심 개념 설명
+          5. 유사 문제를 풀 때 팁
+          초등학생도 이해할 수 있도록 쉽고 친절하게 설명해주세요.`
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "이 문제를 분석하고 자세히 설명해주세요."
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: base64Image,
+                detail: "high"
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 1000,
+      temperature: 0.7
+    });
+
+    const result = response.choices[0].message.content;
+    setAnalysisResult(result);
+
+  } catch (error) {
+    console.error('문제 분석 중 오류:', error);
+    alert('문제 분석 중 오류가 발생했습니다.');
+  } finally {
+    setAnalyzing(false);
+  }
+};
+
+const resetAnalysis = () => {
+  setProblemImage(null);
+  setProblemImagePreview('');
+  setAnalysisResult(null);
+};
 
   const handleGradeExam = async () => {
     const exam = exams.find(e => e.id === selectedExam);
@@ -675,7 +795,7 @@ const handleLogout = async () => {
               학생 관리
             </button>
             <button
-              onClick={() => setActiveTab('videos')}
+              onClick={() => setActiveTab('video')}
               className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
                 activeTab === 'videos' 
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
@@ -684,6 +804,16 @@ const handleLogout = async () => {
             >
               동영상 관리
             </button>
+            <button
+  onClick={() => setActiveTab('analysis')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'analysis' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  문제 분석
+</button>
             <button
               onClick={() => setActiveTab('exams')}
               className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
@@ -1366,7 +1496,7 @@ const handleLogout = async () => {
                 : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            문제 분석
+            동영상 학습
           </button>
           <button
             onClick={() => setActiveTab('video')}
@@ -1376,21 +1506,124 @@ const handleLogout = async () => {
                 : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            동영상 학습
+            
+            문제 분석
           </button>
           <button
-            onClick={() => setActiveTab('omr')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-              activeTab === 'omr' 
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                : 'text-gray-700 hover:bg-gray-100'
+  onClick={() => setActiveTab('analysis')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'analysis' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  문제 분석
+</button>
+
+{activeTab === 'analysis' && (
+  <div className="bg-white rounded-2xl shadow-lg p-8">
+    <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
+      📖 문제 분석 요청
+    </h2>
+    
+    <div className="text-gray-600 mb-6">
+      틀린 문제 사진을 업로드하면 AI가 자동으로 분석해드립니다.
+    </div>
+
+    {!problemImagePreview ? (
+      <div className="border-2 border-dashed border-indigo-300 rounded-xl p-12 text-center mb-6">
+        <label className="cursor-pointer">
+          <div className="space-y-4">
+            <div className="text-6xl">📷</div>
+            <div className="text-gray-600">이미지를 업로드하세요</div>
+            <div className="text-sm text-gray-400">클릭하거나 파일을 드래그하세요</div>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleProblemImageSelect}
+            className="hidden"
+          />
+        </label>
+      </div>
+    ) : (
+      <div className="mb-6 space-y-4">
+        <img 
+          src={problemImagePreview} 
+          alt="문제 미리보기"
+          className="max-w-full h-auto rounded-lg shadow-lg"
+          style={{ maxHeight: '400px' }}
+        />
+        <div className="flex gap-4">
+          <button
+            onClick={resetAnalysis}
+            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+          >
+            다른 사진 선택
+          </button>
+          <button
+            onClick={analyzeProblem}
+            disabled={analyzing}
+            className={`px-6 py-2 rounded-lg text-white font-medium ${
+              analyzing 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-lg'
             }`}
           >
-            OMR 채점
+            {analyzing ? '분석 중...' : '문제 분석하기'}
           </button>
-          <button
+        </div>
+      </div>
+    )}
+
+    {analysisResult && (
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 mt-6">
+        <h3 className="text-lg font-bold mb-4 text-indigo-600">📝 AI 분석 결과</h3>
+        <div className="prose prose-sm max-w-none">
+          <pre className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed">
+            {analysisResult}
+          </pre>
+        </div>
+      </div>
+    )}
+
+    {analyzing && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-xl p-8 max-w-sm">
+          <div className="text-center space-y-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+            <div className="text-lg font-medium">문제를 분석하고 있습니다...</div>
+            <div className="text-sm text-gray-500">잠시만 기다려주세요</div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}  
+
+{activeTab === 'video' && (
+  <div className="bg-white rounded-2xl shadow-lg p-8">
+    <h3 className="text-2xl font-bold mb-6">📹 동영상 학습</h3>
+    <div className="space-y-4">
+      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+        <h4 className="font-bold text-lg">📚 단원 1: 문법 기초</h4>
+        <p className="text-gray-600 text-sm mt-2">15분 | 미시청</p>
+      </div>
+      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+        <h4 className="font-bold text-lg">📚 단원 2: 독해 전략</h4>
+        <p className="text-gray-600 text-sm mt-2">20분 | 미시청</p>
+      </div>
+      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+        <h4 className="font-bold text-lg">📚 단원 3: 문학 분석</h4>
+        <p className="text-gray-600 text-sm mt-2">25분 | 미시청</p>
+      </div>
+    </div>
+  </div>
+)}
+
+<button
   onClick={() => setActiveTab('homework')}
-  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+  className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
     activeTab === 'homework' 
       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
       : 'text-gray-700 hover:bg-gray-100'
@@ -1673,35 +1906,7 @@ const handleLogout = async () => {
           </div>
         )}
 
-        {activeTab === 'video' && (
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">학습 동영상</h2>
-            <div className="space-y-4">
-              {videos.map((video) => (
-                <div key={video.id} className="p-5 bg-gradient-to-r from-gray-50 to-purple-50 rounded-xl hover:shadow-md transition-all">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl">
-                      <Video className="text-white" size={24} />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-lg">{video.title}</p>
-                      <p className="text-sm text-gray-600 mt-1">{video.subject} - {video.unit}</p>
-                      <a
-                        href={video.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block mt-2 text-sm text-indigo-600 hover:text-indigo-700 font-medium hover:underline"
-                      >
-                        동영상 보기 →
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+         </div>
     </div>
   );
 }
