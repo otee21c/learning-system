@@ -10,6 +10,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { Upload, CheckCircle, Clock, Image as ImageIcon } from 'lucide-react';
+import OpenAI from 'openai';
 
 const HomeworkSubmission = ({ currentUser }) => {
   const [assignments, setAssignments] = useState([]);
@@ -70,53 +71,152 @@ const HomeworkSubmission = ({ currentUser }) => {
     reader.readAsDataURL(file);
   };
 
-  // 숙제 제출
-  const handleSubmit = async () => {
-    if (!selectedAssignment || !uploadedImage) {
-      alert('과제를 선택하고 사진을 업로드하세요!');
-      return;
+  // AI 검사 함수 (handleSubmit 함수 위에 추가)
+const checkHomeworkWithAI = async (imageUrl, assignmentTitle) => {
+  try {
+    // OpenAI 클라이언트 초기화
+    const openai = new OpenAI({
+      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+      dangerouslyAllowBrowser: true // 테스트용 (나중에 Firebase Functions로 이동)
+    });
+
+    // AI에게 숙제 검사 요청
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `당신은 친절한 초등학교 선생님입니다.
+          
+과제 제목: "${assignmentTitle}"
+
+이 과제 제목을 분석해서:
+- 핵심 주제 파악 (예: 진달래꽃)
+- 요구사항 파악 (예: 10문제 풀기, 5번씩 쓰기)
+- 과목과 학습 목표 이해
+
+학생의 제출물을 검사할 때:
+1. 과제 제목에 명시된 요구사항을 충족했는지 확인
+2. 해당 주제와 관련된 이해도 평가
+3. 어려워하는 부분이나 실수 패턴 찾기
+4. 글씨체와 정성도도 간단히 확인
+
+간단한 JSON 응답:
+{
+  "completed": true/false,
+  "analysis": "제목과 연결된 구체적 분석 (2-3문장. 예: 진달래꽃 관련 10문제 중 8문제를 풀었습니다. 시어 해석은 잘했으나 주제 파악 문제를 어려워하는 것 같습니다.)",
+  "feedback": "응원 메시지 또는 보완점 (1-2문장. 완료시 칭찬, 미완료시 격려)"
+}`
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `"${assignmentTitle}" 과제를 검사해주세요.`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: imageUrl,
+                detail: "high"
+              }
+            }
+          ]
+        }
+      ],
+      max_tokens: 300,
+      temperature: 0.7
+    });
+
+    // AI 응답 파싱
+    const aiResponse = response.choices[0].message.content;
+    const result = JSON.parse(aiResponse);
+    
+    return {
+      success: true,
+      ...result,
+      checkedAt: new Date().toISOString()
+    };
+
+  } catch (error) {
+    console.error('AI 검사 중 오류:', error);
+    return {
+      success: false,
+      completed: false,
+      analysis: 'AI 검사 중 오류가 발생했습니다.',
+      feedback: '다시 시도해주세요.',
+      error: error.message
+    };
+  }
+};
+
+const handleSubmit = async () => {
+  if (!selectedAssignment || !uploadedImage) {
+    alert('과제를 선택하고 사진을 업로드하세요!');
+    return;
+  }
+
+  setUploading(true);
+
+  try {
+    // Firebase Storage 업로드 코드
+    const timestamp = Date.now();
+    const fileName = `homework/${currentUser.id}/${selectedAssignment.id}_${timestamp}`;
+    const storageRef = ref(storage, fileName);
+    
+    await uploadBytes(storageRef, uploadedImage);
+    const imageUrl = await getDownloadURL(storageRef);
+
+    // Firestore 저장 코드
+    const submissionRef = await addDoc(collection(db, 'submissions'), {
+      assignmentId: selectedAssignment.id,
+      assignmentTitle: selectedAssignment.title,
+      studentId: currentUser.id,
+      studentName: currentUser.name,
+      imageUrl: imageUrl,
+      submittedAt: serverTimestamp(),
+      status: 'pending',
+      aiResult: null
+    });
+
+    // AI 검사 실행
+    const aiResult = await checkHomeworkWithAI(imageUrl, selectedAssignment.title);
+    
+    // Firestore 업데이트
+    const { updateDoc, doc } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'submissions', submissionRef.id), {
+      status: aiResult.success ? (aiResult.completed ? 'completed' : 'partial') : 'error',
+      aiResult: aiResult,
+      checkedAt: aiResult.checkedAt || new Date().toISOString()
+    });
+
+    // 여기서부터가 157번 줄의 if 문과 연결
+    if (aiResult.success) {
+      if (aiResult.completed) {
+        alert(`✅ 숙제 제출 완료!\n\n📝 ${aiResult.analysis}\n\n💪 ${aiResult.feedback}`);
+      } else {
+        alert(`📝 숙제를 제출했습니다!\n\n📋 ${aiResult.analysis}\n\n📚 ${aiResult.feedback}`);
+      }
+    } else {
+      alert('숙제가 제출되었지만 AI 검사에 실패했습니다.\n나중에 다시 확인해주세요.');
     }
-
-    setUploading(true);
-
-    try {
-      // 1. Firebase Storage에 이미지 업로드
-      const timestamp = Date.now();
-      const fileName = `homework/${currentUser.id}/${selectedAssignment.id}_${timestamp}.jpg`;
-      const storageRef = ref(storage, fileName);
-      
-      await uploadBytes(storageRef, uploadedImage);
-      const imageUrl = await getDownloadURL(storageRef);
-
-      // 2. Firestore에 제출 정보 저장
-      await addDoc(collection(db, 'submissions'), {
-        assignmentId: selectedAssignment.id,
-        assignmentTitle: selectedAssignment.title,
-        studentId: currentUser.id,
-        studentName: currentUser.name,
-        imageUrl: imageUrl,
-        submittedAt: serverTimestamp(),
-        status: 'pending', // pending, completed, needs_improvement
-        aiResult: null
-      });
-
-      alert('숙제가 제출되었습니다! AI 검사 중...');
-      
-      // 상태 초기화
-      setSelectedAssignment(null);
-      setUploadedImage(null);
-      setImagePreview('');
-      
-      // 제출 내역 새로고침
-      loadSubmissions();
-
-    } catch (error) {
-      console.error('제출 실패:', error);
-      alert('제출 실패: ' + error.message);
-    } finally {
-      setUploading(false);
-    }
-  };
+    
+    // 상태 초기화
+    setSelectedAssignment(null);
+    setUploadedImage(null);
+    setImagePreview('');
+    
+    // 제출 내역 새로고침
+    loadSubmissions();
+    
+  } catch (error) {
+    console.error('제출 실패:', error);
+    alert('제출 실패: ' + error.message);
+  } finally {
+    setUploading(false);
+  }
+};
 
   // 제출 여부 확인
   const isSubmitted = (assignmentId) => {
