@@ -3,6 +3,8 @@ import {
   collection, 
   getDocs, 
   addDoc, 
+  deleteDoc,
+  doc,
   query, 
   where,
   serverTimestamp 
@@ -53,6 +55,23 @@ const HomeworkSubmission = ({ currentUser }) => {
       setSubmissions(submissionList);
     } catch (error) {
       console.error('제출 내역 불러오기 실패:', error);
+    }
+  };
+
+  // 제출물 삭제
+  const handleDeleteSubmission = async (submissionId) => {
+    if (!window.confirm('정말 이 제출물을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'submissions', submissionId));
+      // 목록에서 제거
+      setSubmissions(submissions.filter(s => s.id !== submissionId));
+      alert('제출물이 삭제되었습니다.');
+    } catch (error) {
+      console.error('삭제 실패:', error);
+      alert('삭제에 실패했습니다.');
     }
   };
 
@@ -439,6 +458,21 @@ const handleSubmit = async () => {
                   }}>
                     {submission.status === 'completed' ? '완료' : '검사중'}
                   </span>
+                  <button
+                  onClick={() => handleDeleteSubmission(submission.id)}
+                  style={{
+                    marginLeft: '10px',
+                    padding: '5px 12px',
+                    backgroundColor: '#ef4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  🗑️ 삭제
+                </button>
                 </div>
               </div>
             ))}

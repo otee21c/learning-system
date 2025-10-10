@@ -2,6 +2,7 @@ import HomeworkManager from './components/HomeworkManager';
 import HomeworkSubmission from './components/HomeworkSubmission';
 import React, { useState, useEffect } from 'react';
 import { Upload, Video, FileText, User, LogOut, CheckCircle, XCircle, Edit2 } from 'lucide-react';
+import OpenAI from 'openai';
 import './index.css';
 import { auth } from './firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -10,6 +11,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, onSnapshot } fr
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('problem');
   
   const [students, setStudents] = useState([
@@ -67,6 +69,35 @@ export default function App() {
     omrList: []
   });
 // Firestore에서 데이터 로드
+// Firebase 인증 상태 감지 (새로고침 시 로그인 유지)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // 로그인 상태 유지
+        const email = user.email;
+        const userId = email ? email.split('@')[0] : user.uid;
+        
+        // Firestore에서 사용자 정보 가져오기
+        const studentsRef = collection(db, 'students');
+        const snapshot = await getDocs(studentsRef);
+        const studentDoc = snapshot.docs.find(doc => doc.data().id === userId);
+        
+        if (studentDoc) {
+          const studentData = studentDoc.data();
+          setCurrentUser({ type: 'student', id: studentData.id, name: studentData.name, exams: studentData.exams });
+        } else {
+          setCurrentUser({ type: 'admin', name: '관리자' });
+        }
+        setLoading(false);
+      } else {
+        // 로그아웃 상태
+        setCurrentUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe(); // cleanup
+  }, []);
 useEffect(() => {
   // 학생 데이터 로드
   const studentsRef = collection(db, 'students');
@@ -703,6 +734,21 @@ const handleLogout = async () => {
       )
     });
   };
+if (loading) {
+    return (
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'linear-gradient(to-br, from-violet-500 via-purple-500 to-indigo-600)',
+        color: 'white',
+        fontSize: '24px'
+      }}>
+        로딩 중...
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
