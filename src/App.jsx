@@ -1470,7 +1470,7 @@ const handleLogout = async () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-lg p-6 mb-8">
         <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-white">{currentUser.name}님 환영합니다</h1>
@@ -1487,7 +1487,7 @@ const handleLogout = async () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex gap-2 mb-8 overflow-x-auto bg-white rounded-xl p-2 shadow-sm">
+        <div className="flex gap-2 mb-8 overflow-x-auto bg-white rounded-xl p-2 shadow">
           <button
             onClick={() => setActiveTab('problem')}
             className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
@@ -1496,31 +1496,34 @@ const handleLogout = async () => {
                 : 'text-gray-700 hover:bg-gray-100'
             }`}
           >
-            동영상 학습
-          </button>
-          <button
-            onClick={() => setActiveTab('video')}
-            className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-              activeTab === 'video' 
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                : 'text-gray-700 hover:bg-gray-100'
-            }`}
-          >
             
             문제 분석
-          </button>
-          <button
-  onClick={() => setActiveTab('analysis')}
-  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-    activeTab === 'analysis' 
+        </button>
+        <button
+  onClick={() => setActiveTab('homework')}
+  className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
+    activeTab === 'homework' 
       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
       : 'text-gray-700 hover:bg-gray-100'
   }`}
 >
-  문제 분석
+  📝 숙제 제출
 </button>
+<button
+  onClick={() => setActiveTab('mypage')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'mypage' 
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  내 성적
+</button>
+        </div>
 
-{activeTab === 'analysis' && (
+<div className="max-w-7xl mx-auto px-4 py-8">
+
+{activeTab === 'problem' && (
   <div className="bg-white rounded-2xl shadow-lg p-8">
     <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
       📖 문제 분석 요청
@@ -1601,47 +1604,7 @@ const handleLogout = async () => {
   </div>
 )}  
 
-{activeTab === 'video' && (
-  <div className="bg-white rounded-2xl shadow-lg p-8">
-    <h3 className="text-2xl font-bold mb-6">📹 동영상 학습</h3>
-    <div className="space-y-4">
-      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-        <h4 className="font-bold text-lg">📚 단원 1: 문법 기초</h4>
-        <p className="text-gray-600 text-sm mt-2">15분 | 미시청</p>
-      </div>
-      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-        <h4 className="font-bold text-lg">📚 단원 2: 독해 전략</h4>
-        <p className="text-gray-600 text-sm mt-2">20분 | 미시청</p>
-      </div>
-      <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-        <h4 className="font-bold text-lg">📚 단원 3: 문학 분석</h4>
-        <p className="text-gray-600 text-sm mt-2">25분 | 미시청</p>
-      </div>
-    </div>
-  </div>
-)}
 
-<button
-  onClick={() => setActiveTab('homework')}
-  className={`px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg font-medium transition-all whitespace-nowrap text-sm sm:text-base ${
-    activeTab === 'homework' 
-      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-      : 'text-gray-700 hover:bg-gray-100'
-  }`}
->
-  📝 숙제 제출
-</button>
-<button
-  onClick={() => setActiveTab('mypage')}
-  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-    activeTab === 'mypage' 
-      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-      : 'text-gray-700 hover:bg-gray-100'
-  }`}
->
-  내 성적
-</button>
-        </div>
 
         {activeTab === 'omr' && (
           <div className="space-y-6">
@@ -1894,19 +1857,9 @@ const handleLogout = async () => {
           </div>
         )}
 
-        {activeTab === 'problem' && (
-          <div className="bg-white rounded-2xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">문제 분석 요청</h2>
-            <p className="text-gray-600 mb-6">틀린 문제 사진을 업로드하면 AI가 자동으로 분석해드립니다.</p>
-            <div className="p-12 border-2 border-dashed border-indigo-300 rounded-2xl text-center bg-gradient-to-br from-blue-50 to-indigo-50 hover:border-indigo-400 transition-all">
-              <Upload className="mx-auto text-indigo-600 mb-4" size={64} />
-              <p className="text-base text-gray-700 font-medium mb-2">이미지를 업로드하세요</p>
-              <p className="text-sm text-gray-500">클릭하거나 파일을 드래그하세요</p>
-            </div>
-          </div>
-        )}
-
+        
          </div>
+    </div>
     </div>
   );
 }
