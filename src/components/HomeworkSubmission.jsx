@@ -174,7 +174,7 @@ const handleSubmit = async () => {
       assignmentTitle: selectedAssignment.title,
       studentId: currentUser.id,
       studentName: currentUser.name,
-      imageUrl: imageUrl,
+      fileUrl: imageUrl,
       submittedAt: serverTimestamp(),
       status: 'pending',
       aiResult: null

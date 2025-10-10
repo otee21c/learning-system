@@ -13,6 +13,8 @@ import { db } from '../firebase';
 
 const HomeworkManager = () => {
   const [assignments, setAssignments] = useState([]);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newAssignment, setNewAssignment] = useState({
     title: '',
@@ -38,6 +40,25 @@ const HomeworkManager = () => {
       console.error('과제 불러오기 실패:', error);
     }
   };
+  // 학생 제출 기록 불러오기
+const loadSubmissions = async (assignmentId) => {
+  try {
+    const q = query(
+      collection(db, 'submissions'),
+      orderBy('submittedAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+    const submissionList = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      .filter(sub => sub.assignmentId === assignmentId);
+    setSubmissions(submissionList);
+  } catch (error) {
+    console.error('제출 기록 불러오기 실패:', error);
+  }
+};
 
   // 과제 생성
   const handleCreateAssignment = async (e) => {
@@ -187,12 +208,17 @@ const HomeworkManager = () => {
             {assignments.map(assignment => (
               <div
                 key={assignment.id}
+                onClick={() => {
+  setSelectedAssignment(assignment);
+  loadSubmissions(assignment.id);
+}}
                 style={{
                   backgroundColor: 'white',
                   padding: '20px',
                   borderRadius: '10px',
                   border: '1px solid #ddd',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+cursor: 'pointer'
                 }}
               >
                 <h4 style={{ margin: '0 0 10px 0' }}>{assignment.title}</h4>
@@ -204,6 +230,72 @@ const HomeworkManager = () => {
             ))}
           </div>
         )}
+        {/* 선택된 과제의 제출 기록 */}
+      {selectedAssignment && (
+        <div style={{ marginTop: '30px' }}>
+          <h3 style={{ marginBottom: '20px' }}>
+            📝 {selectedAssignment.title} - 제출 기록
+          </h3>
+          
+          {submissions.length === 0 ? (
+            <p style={{ color: '#999', textAlign: 'center', padding: '40px' }}>
+              아직 제출한 학생이 없습니다.
+            </p>
+          ) : (
+            <div style={{ display: 'grid', gap: '15px' }}>
+              {submissions.map(submission => (
+                <div
+                  key={submission.id}
+                  style={{
+                    backgroundColor: 'white',
+                    padding: '20px',
+                    borderRadius: '10px',
+                    border: '1px solid #ddd'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                        {submission.studentName || '학생'}
+                      </p>
+                      <p style={{ color: '#666', fontSize: '14px', marginTop: '5px' }}>
+                        제출 시간: {submission.submittedAt && new Date(submission.submittedAt.seconds * 1000).toLocaleString('ko-KR')}
+                      </p>
+                    </div>
+                    {submission.fileUrl && (
+                      <a
+                        href={submission.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#4CAF50',
+                          color: 'white',
+                          borderRadius: '5px',
+                          textDecoration: 'none'
+                        }}
+                      >
+                        파일 보기
+                      </a>
+                    )}
+                  </div>
+                  {submission.feedback && (
+                    <div style={{
+                      marginTop: '15px',
+                      padding: '15px',
+                      backgroundColor: '#f5f5f5',
+                      borderRadius: '5px'
+                    }}>
+                      <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>AI 피드백:</p>
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{submission.feedback}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       </div>
     </div>
   );
