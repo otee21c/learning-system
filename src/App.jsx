@@ -4,15 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { Upload, Video, FileText, User, LogOut, CheckCircle, XCircle, Edit2 } from 'lucide-react';
 import OpenAI from 'openai';
 import './index.css';
-import { auth } from './firebase';
+import { auth, db, storage } from './firebase';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import ProblemAssignmentManager from './components/ProblemAssignmentManager';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import ProblemAnalysisManager from './components/ProblemAnalysisManager';
+import NotificationManager from './components/NotificationManager';
+import CurriculumManager from './components/CurriculumManager';
+import AttendanceManager from './components/AttendanceManager';
+import ProblemGenerator from './components/ProblemGenerator';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('problem');
+  const [problemAnalysisList, setProblemAnalysisList] = useState([]);
   
   const [students, setStudents] = useState([
     { id: 'student1', name: '김민수', grade: '중3', phone: '010-1234-5678', birthDate: '0315', password: 'pass123', exams: [] }
@@ -71,33 +78,38 @@ export default function App() {
 // Firestore에서 데이터 로드
 // Firebase 인증 상태 감지 (새로고침 시 로그인 유지)
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // 로그인 상태 유지
-        const email = user.email;
-        const userId = email ? email.split('@')[0] : user.uid;
-        
-        // Firestore에서 사용자 정보 가져오기
-        const studentsRef = collection(db, 'students');
-        const snapshot = await getDocs(studentsRef);
-        const studentDoc = snapshot.docs.find(doc => doc.data().id === userId);
-        
-        if (studentDoc) {
-          const studentData = studentDoc.data();
-          setCurrentUser({ type: 'student', id: studentData.id, name: studentData.name, exams: studentData.exams });
-        } else {
-          setCurrentUser({ type: 'admin', name: '관리자' });
-        }
-        setLoading(false);
+  const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // 로그인 상태 유지
+      const email = user.email;
+      const userId = email ? email.split('@')[0] : user.uid;
+      
+      // Firestore에서 사용자 정보 가져오기
+      const studentsRef = collection(db, 'students');
+      const snapshot = await getDocs(studentsRef);
+      const studentDoc = snapshot.docs.find(doc => doc.data().id === userId);
+      
+      if (studentDoc) {
+        const studentData = studentDoc.data();
+        setCurrentUser({ type: 'student', id: studentData.id, name: studentData.name, exams: studentData.exams });
       } else {
-        // 로그아웃 상태
-        setCurrentUser(null);
-        setLoading(false);
+        setCurrentUser({ type: 'admin', name: '관리자' });
       }
-    });
+      setLoading(false);
+    } else {
+      // Firebase Auth에 로그인 안 되어 있으면 localStorage 확인
+      const savedUser = localStorage.getItem('currentUser'); // ← 추가
+      if (savedUser) {
+        setCurrentUser(JSON.parse(savedUser)); // ← 추가
+      } else {
+        setCurrentUser(null);
+      }
+      setLoading(false);
+    }
+  });
 
-    return () => unsubscribe(); // cleanup
-  }, []);
+  return () => unsubscribe();
+}, []);
 useEffect(() => {
   // 학생 데이터 로드
   const studentsRef = collection(db, 'students');
@@ -110,7 +122,7 @@ useEffect(() => {
       setStudents(studentsData);
     }
   });
-
+ 
   // 이미지 선택 핸들러
 const handleProblemImageSelect = (e) => {
   const file = e.target.files[0];
@@ -154,19 +166,32 @@ const analyzeProblem = async () => {
     }
   });
 
+  // 문제 분석 데이터 로드
+const problemAnalysisRef = collection(db, 'problemAnalysis');
+const unsubscribeProblemAnalysis = onSnapshot(problemAnalysisRef, (snapshot) => {
+  const analysisData = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+  setProblemAnalysisList(analysisData);
+});
+
   return () => {
     unsubscribeStudents();
     unsubscribeExams();
+    unsubscribeProblemAnalysis();
   };
 }, []);
 
   // 시험 데이터 로드
-  const handleLogin = async (e) => {
+ const handleLogin = async (e) => {
   e.preventDefault();
   
   // 관리자 로그인 체크 (Firebase Auth 없이)
   if (loginForm.id === 'admin' && loginForm.password === 'admin123') {
-    setCurrentUser({ type: 'admin', name: '관리자' });
+    const adminUser = { type: 'admin', name: '관리자' };
+    setCurrentUser(adminUser);
+    localStorage.setItem('currentUser', JSON.stringify(adminUser)); // ← 추가
     setActiveTab('students');
     return;
   }
@@ -449,6 +474,21 @@ const analyzeProblem = async () => {
     const result = response.choices[0].message.content;
     setAnalysisResult(result);
 
+    // Firebase에 저장
+const timestamp = new Date();
+const imageRef = ref(storage, `problem-analysis/${currentUser.uid}_${timestamp.getTime()}.jpg`);
+await uploadBytes(imageRef, problemImage);
+const imageUrl = await getDownloadURL(imageRef);
+
+await addDoc(collection(db, 'problemAnalysis'), {
+  studentId: currentUser.id,
+  studentName: currentUser.name,
+  imageUrl: imageUrl,
+  analysis: result,
+  timestamp: timestamp,
+  createdAt: new Date().toISOString()
+});
+
   } catch (error) {
     console.error('문제 분석 중 오류:', error);
     alert('문제 분석 중 오류가 발생했습니다.');
@@ -533,6 +573,10 @@ const resetAnalysis = () => {
     const snapshot = await getDocs(studentsRef);
     const studentDoc = snapshot.docs.find(doc => doc.data().id === currentUser.id);
     
+    console.log('현재 사용자 ID:', currentUser.id);
+    console.log('찾은 학생 문서:', studentDoc ? '있음' : '없음');
+    console.log('모든 학생 ID들:', snapshot.docs.map(d => d.data().id));
+    
     if (studentDoc) {
       // 기존 시험 결과에 새 결과 추가
       const studentData = studentDoc.data();
@@ -556,6 +600,7 @@ const resetAnalysis = () => {
 const handleLogout = async () => {
   try {
     await signOut(auth);
+    localStorage.removeItem('currentUser'); // ← 추가
     setCurrentUser(null);
     setActiveTab('problem');
   } catch (error) {
@@ -632,7 +677,7 @@ const handleLogout = async () => {
     });
   };
 
-  const handleBatchGrade = () => {
+  const handleBatchGrade = async () => {
     if (batchGrading.omrList.length === 0) {
       alert('채점할 OMR이 없습니다.');
       return;
@@ -709,7 +754,20 @@ const handleLogout = async () => {
       return { ...student, exams: [...student.exams, result] };
     });
 
-    setStudents(updatedStudents);
+    // Firestore에 각 학생별로 저장
+for (const student of updatedStudents) {
+  const studentsRef = collection(db, 'students');
+  const snapshot = await getDocs(studentsRef);
+  const studentDoc = snapshot.docs.find(doc => doc.data().id === student.id);
+  
+  if (studentDoc) {
+    await updateDoc(doc(db, 'students', studentDoc.id), {
+      exams: student.exams
+    });
+  }
+}
+
+setStudents(updatedStudents);
     
     setBatchGrading({
       selectedExam: null,
@@ -761,7 +819,7 @@ if (loading) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                 </svg>
               </div>
-              <h1 className="text-4xl font-bold text-white mb-2">학습 관리 시스템</h1>
+              <h1 className="text-4xl font-bold text-white mb-2">오늘의 국어 연구소</h1>
               <p className="text-white text-opacity-90 text-sm">스마트한 학습 관리의 시작</p>
             </div>
             
@@ -796,13 +854,15 @@ if (loading) {
               </button>
             </div>
             
-            <div className="mt-8 p-4 bg-white bg-opacity-10 rounded-2xl border border-white border-opacity-20">
-              <p className="text-xs text-white text-opacity-80 text-center mb-2 font-medium">테스트 계정</p>
-              <div className="space-y-1 text-xs text-white text-opacity-70 text-center">
-                <p>관리자: admin / admin123</p>
-                <p>학생: student1 / pass123</p>
-              </div>
+          <div className="mt-8 p-4 bg-white bg-opacity-10 rounded-2xl border border-white border-opacity-20">
+            <div className="flex justify-center">
+              <img 
+                src="/logo.png" 
+                alt="오늘의 국어 연구소" 
+                style={{ maxWidth: '200px', height: 'auto' }}
+              />
             </div>
+          </div>
           </div>
         </div>
       </div>
@@ -830,77 +890,116 @@ if (loading) {
 
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex gap-2 mb-8 overflow-x-auto bg-white rounded-xl p-2 shadow-sm">
-            <button
-              onClick={() => setActiveTab('students')}
-              className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'students' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              학생 관리
-            </button>
-            <button
-              onClick={() => setActiveTab('video')}
-              className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'videos' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              동영상 관리
-            </button>
-            <button
-  onClick={() => setActiveTab('analysis')}
+  <button
+    onClick={() => setActiveTab('students')}
+    className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+      activeTab === 'students' 
+        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+        : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    학생 관리
+  </button>
+  
+  <button
+    onClick={() => setActiveTab('exams')}
+    className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+      activeTab === 'exams' 
+        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+        : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    시험 관리
+  </button>
+  
+  <button
+    onClick={() => setActiveTab('problemAnalysis')}
+    className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+      activeTab === 'problemAnalysis' 
+        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+        : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    문제 분석
+  </button>
+  
+  <button
+    onClick={() => setActiveTab('batch')}
+    className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+      activeTab === 'batch' 
+        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+        : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    일괄 채점
+  </button>
+  
+  <button
+    onClick={() => setActiveTab('homework')}
+    className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+      activeTab === 'homework' 
+        ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
+        : 'text-gray-700 hover:bg-gray-100'
+    }`}
+  >
+    📚 과제 관리
+  </button>
+
+  <button
+  onClick={() => setActiveTab('curriculum')}
   className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-    activeTab === 'analysis' 
+    activeTab === 'curriculum'
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105'
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  📅 커리큘럼 관리
+</button>
+
+<button
+  onClick={() => setActiveTab('attendance')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'attendance'
+      ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105'
+      : 'text-gray-700 hover:bg-gray-100'
+  }`}
+>
+  📊 출결 관리
+</button>
+  
+  <button
+  onClick={() => setActiveTab('notification')}
+  className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+    activeTab === 'notification' 
       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
       : 'text-gray-700 hover:bg-gray-100'
   }`}
 >
-  문제 분석
+  📢 알림장
 </button>
-            <button
-              onClick={() => setActiveTab('exams')}
-              className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'exams' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              시험 관리
-            </button>
-            <button
-              onClick={() => setActiveTab('batch')}
-              className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'batch' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              일괄 채점
-            </button>
-            <button
-  onClick={() => setActiveTab('homework')}
+
+<button
+  onClick={() => setActiveTab('stats')}
   className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-    activeTab === 'homework' 
+    activeTab === 'stats' 
       ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
       : 'text-gray-700 hover:bg-gray-100'
   }`}
 >
-  📚 숙제 관리
+  성적 통계
 </button>
-            <button
-              onClick={() => setActiveTab('stats')}
-              className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                activeTab === 'stats' 
-                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105' 
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              성적 통계
-            </button>
-          </div>
+
+<button
+          onClick={() => setActiveTab('problemgen')}
+          className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+            activeTab === 'problemgen'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105'
+              : 'text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          ✨ AI 문제 생성
+        </button>
+</div>
 
           {activeTab === 'students' && (
             <div className="space-y-6">
@@ -1375,6 +1474,16 @@ if (loading) {
 
           {activeTab === 'homework' && <HomeworkManager />}
 
+          {activeTab === 'curriculum' && <CurriculumManager />}
+
+          {activeTab === 'attendance' && <AttendanceManager />}
+
+          {activeTab === 'problemAnalysis' && <ProblemAnalysisManager />}
+
+          {activeTab === 'notification' && <NotificationManager />}
+
+          {activeTab === 'problemgen' && <ProblemGenerator />}
+
           {activeTab === 'stats' && (
             <div className="space-y-6">
               <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -1519,8 +1628,8 @@ if (loading) {
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl shadow-lg p-6 mb-8">
         <div className="max-w-7xl mx-auto px-4 py-6 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-white">{currentUser.name}님 환영합니다</h1>
-            <p className="text-indigo-100 text-sm mt-1">{currentUser.grade}</p>
+            <h1 className="text-3xl font-bold text-white">오늘의 국어 연구소</h1>
+            <p className="text-indigo-100 text-sm mt-1">{currentUser.name}님 환영합니다</p>
           </div>
           <button
             onClick={handleLogout}
@@ -1553,8 +1662,18 @@ if (loading) {
       : 'text-gray-700 hover:bg-gray-100'
   }`}
 >
-  📝 숙제 제출
+  📝 과제 제출
 </button>
+<button
+          onClick={() => setActiveTab('problemgen')}
+          className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+            activeTab === 'problemgen'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg transform scale-105'
+              : 'text-gray-700 hover:bg-gray-100'
+          }`}
+        >
+          ✨ AI 문제 생성
+        </button>
 <button
   onClick={() => setActiveTab('mypage')}
   className={`px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${

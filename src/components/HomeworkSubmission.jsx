@@ -99,7 +99,7 @@ const checkHomeworkWithAI = async (imageUrl, assignmentTitle) => {
       dangerouslyAllowBrowser: true // 테스트용 (나중에 Firebase Functions로 이동)
     });
 
-    // AI에게 숙제 검사 요청
+    // AI에게 과제 검사 요청
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -213,12 +213,12 @@ const handleSubmit = async () => {
     // 여기서부터가 157번 줄의 if 문과 연결
     if (aiResult.success) {
       if (aiResult.completed) {
-        alert(`✅ 숙제 제출 완료!\n\n📝 ${aiResult.analysis}\n\n💪 ${aiResult.feedback}`);
+        alert(`✅ 과제 제출 완료!\n\n📝 ${aiResult.analysis}\n\n💪 ${aiResult.feedback}`);
       } else {
-        alert(`📝 숙제를 제출했습니다!\n\n📋 ${aiResult.analysis}\n\n📚 ${aiResult.feedback}`);
+        alert(`📝 과제를 제출했습니다!\n\n📋 ${aiResult.analysis}\n\n📚 ${aiResult.feedback}`);
       }
     } else {
-      alert('숙제가 제출되었지만 AI 검사에 실패했습니다.\n나중에 다시 확인해주세요.');
+      alert('과제가 제출되었지만 AI 검사에 실패했습니다.\n나중에 다시 확인해주세요.');
     }
     
     // 상태 초기화
@@ -249,7 +249,7 @@ const handleSubmit = async () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <h2 style={{ marginBottom: '30px' }}>📝 숙제 제출</h2>
+      <h2 style={{ marginBottom: '30px' }}>📝 과제 제출</h2>
 
       {/* 과제 목록 */}
       <div style={{ marginBottom: '30px' }}>
@@ -356,7 +356,7 @@ const handleSubmit = async () => {
               <div>
                 <img 
                   src={imagePreview} 
-                  alt="숙제 미리보기"
+                  alt="과제 미리보기"
                   style={{
                     maxWidth: '100%',
                     maxHeight: '400px',
@@ -385,7 +385,7 @@ const handleSubmit = async () => {
               <label style={{ cursor: 'pointer', display: 'block' }}>
                 <ImageIcon size={64} style={{ color: '#2196F3', margin: '0 auto 15px' }} />
                 <p style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
-                  숙제 사진을 업로드하세요
+                  과제 사진을 업로드하세요
                 </p>
                 <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
                   클릭하여 파일 선택
