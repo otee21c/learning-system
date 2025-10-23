@@ -20,6 +20,10 @@ const ProblemGenerator = () => {
   const [pdfFile, setPdfFile] = useState(null);
   const [generatedProblems, setGeneratedProblems] = useState(null);
   const [textContent, setTextContent] = useState('');
+  
+  // 문제 상세보기용 state 추가
+  const [selectedProblemSet, setSelectedProblemSet] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // 문제 세트 불러오기
   useEffect(() => {
@@ -51,7 +55,6 @@ const ProblemGenerator = () => {
   };
 
   // AI 문제 생성
-  // AI 문제 생성
   const handleGenerateProblems = async () => {
     if (!weekNumber || !title || !textContent) {
       alert('주차, 제목, 지문 내용을 모두 입력해주세요.');
@@ -61,8 +64,7 @@ const ProblemGenerator = () => {
     setLoading(true);
 
     try {
-      // 1. PDF 업로드
-      // 1. PDF 업로드 (선택사항)
+      // PDF 업로드 (선택사항)
       let pdfUrl = null;
       if (pdfFile) {
         const storageRef = ref(storage, `problem-materials/${Date.now()}_${pdfFile.name}`);
@@ -70,10 +72,9 @@ const ProblemGenerator = () => {
         pdfUrl = await getDownloadURL(storageRef);
       }
 
-      // 2. PDF에서 텍스트 추출 (간단한 방법: 사용자에게 복사 붙여넣기 요청)
       alert('PDF가 업로드되었습니다. 잠시 후 문제가 생성됩니다...');
 
-      // 3. OpenAI로 문제 생성
+      // OpenAI로 문제 생성
       const prompt = `당신은 고등학교 국어 교사입니다. 다음 지문을 읽고 문제를 생성해주세요.
 
 주제: ${title}
@@ -81,7 +82,6 @@ const ProblemGenerator = () => {
 === 지문 ===
 ${textContent}
 === 지문 끝 ===
-(빈 줄)
 
 위 지문을 읽고 다음 형식으로 문제를 생성해주세요:
 
@@ -174,6 +174,7 @@ ${textContent}
       setWeekNumber('');
       setTitle('');
       setPdfFile(null);
+      setTextContent('');
       loadProblemSets();
     } catch (error) {
       console.error('저장 실패:', error);
@@ -193,6 +194,12 @@ ${textContent}
       console.error('삭제 실패:', error);
       alert('삭제에 실패했습니다.');
     }
+  };
+
+  // 문제 세트 상세보기
+  const handleViewProblemSet = (set) => {
+    setSelectedProblemSet(set);
+    setShowDetailModal(true);
   };
 
   return (
@@ -279,7 +286,9 @@ ${textContent}
                 ✓ {pdfFile.name}
               </p>
             )}
-            <div style={{ marginBottom: '20px' }}>
+          </div>
+          
+          <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
               지문 내용 입력 <span style={{ color: '#ef4444' }}>*</span>
             </label>
@@ -301,7 +310,6 @@ ${textContent}
             <p style={{ marginTop: '5px', color: '#666', fontSize: '12px' }}>
               💡 교재나 학습 자료의 지문을 복사해서 붙여넣기 해주세요.
             </p>
-          </div>
           </div>
 
           <button
@@ -399,8 +407,13 @@ ${textContent}
                   boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s'
                 }}
+                onClick={() => handleViewProblemSet(set)}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
                 <div>
                   <h4 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '5px' }}>
@@ -411,7 +424,10 @@ ${textContent}
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDeleteProblemSet(set.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteProblemSet(set.id);
+                  }}
                   style={{
                     padding: '8px 16px',
                     backgroundColor: '#ef4444',
@@ -432,6 +448,118 @@ ${textContent}
           </div>
         )}
       </div>
+
+      {/* 문제 상세보기 모달 */}
+      {showDetailModal && selectedProblemSet && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            maxWidth: '800px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            padding: '30px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                {selectedProblemSet.weekNumber}주차 - {selectedProblemSet.title}
+              </h3>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                닫기
+              </button>
+            </div>
+
+            {/* OX 문제 */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '15px', color: '#6366f1' }}>
+                📝 OX 문제 ({selectedProblemSet.oxProblems?.length || 0}개)
+              </h4>
+              {selectedProblemSet.oxProblems?.map((problem, index) => (
+                <div key={index} style={{
+                  backgroundColor: '#f9fafb',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  marginBottom: '10px',
+                  borderLeft: '4px solid #6366f1'
+                }}>
+                  <p style={{ fontWeight: 'bold', marginBottom: '8px' }}>
+                    {problem.number}. {problem.question}
+                  </p>
+                  <p style={{ color: '#10b981', fontWeight: 'bold' }}>
+                    정답: {problem.answer ? 'O' : 'X'}
+                  </p>
+                  <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>
+                    💡 {problem.explanation}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* 객관식 문제 */}
+            <div>
+              <h4 style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '15px', color: '#10b981' }}>
+                ✏️ 객관식 문제 ({selectedProblemSet.multipleProblems?.length || 0}개)
+              </h4>
+              {selectedProblemSet.multipleProblems?.map((problem, index) => (
+                <div key={index} style={{
+                  backgroundColor: '#f0fdf4',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  marginBottom: '10px',
+                  borderLeft: '4px solid #10b981'
+                }}>
+                  <p style={{ fontWeight: 'bold', marginBottom: '12px' }}>
+                    {problem.number}. {problem.question}
+                  </p>
+                  <div style={{ marginBottom: '12px' }}>
+                    {problem.options?.map((option, optIndex) => (
+                      <p key={optIndex} style={{
+                        padding: '8px',
+                        marginBottom: '4px',
+                        backgroundColor: optIndex === problem.answer ? '#d1fae5' : 'white',
+                        borderRadius: '4px',
+                        fontWeight: optIndex === problem.answer ? 'bold' : 'normal'
+                      }}>
+                        {option}
+                      </p>
+                    ))}
+                  </div>
+                  <p style={{ color: '#10b981', fontWeight: 'bold' }}>
+                    정답: {problem.answer + 1}번
+                  </p>
+                  <p style={{ color: '#6b7280', fontSize: '14px', marginTop: '8px' }}>
+                    💡 {problem.explanation}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

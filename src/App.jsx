@@ -14,6 +14,7 @@ import NotificationManager from './components/NotificationManager';
 import CurriculumManager from './components/CurriculumManager';
 import AttendanceManager from './components/AttendanceManager';
 import ProblemGenerator from './components/ProblemGenerator';
+import ProblemSolver from './components/ProblemSolver';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -421,10 +422,20 @@ const analyzeProblem = async () => {
     return;
   }
 
+  // 이미 분석 중이면 중복 실행 방지
+  if (analyzing) {
+    return;
+  }
+
   setAnalyzing(true);
   setAnalysisResult(null);
 
   try {
+      // OpenAI API 키 확인
+    if (!import.meta.env.VITE_OPENAI_API_KEY) {
+      throw new Error('OpenAI API 키가 설정되지 않았습니다.');
+    }
+
     const openai = new OpenAI({
       apiKey: import.meta.env.VITE_OPENAI_API_KEY,
       dangerouslyAllowBrowser: true
@@ -491,7 +502,8 @@ await addDoc(collection(db, 'problemAnalysis'), {
 
   } catch (error) {
     console.error('문제 분석 중 오류:', error);
-    alert('문제 분석 중 오류가 발생했습니다.');
+    console.error('Error details:', error.message);
+    alert(`문제 분석 중 오류가 발생했습니다.\n\n오류: ${error.message || '알 수 없는 오류'}`);
   } finally {
     setAnalyzing(false);
   }
@@ -1767,9 +1779,11 @@ if (loading) {
       </div>
     )}
   </div>
-)}  
+)}
 
-
+{activeTab === 'problemgen' && (
+  <ProblemSolver studentId={currentUser?.id} />
+)}
 
         {activeTab === 'omr' && (
           <div className="space-y-6">
