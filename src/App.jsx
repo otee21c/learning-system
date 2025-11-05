@@ -16,6 +16,7 @@ import AttendanceManager from './components/AttendanceManager';
 import ProblemGenerator from './components/ProblemGenerator';
 import ProblemSolver from './components/ProblemSolver';
 import ProblemAnalysis from './components/ProblemAnalysis';
+import ManualScoreInput from './components/ManualScoreInput';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -1325,6 +1326,10 @@ if (loading) {
                     </div>
                   ))}
                 </div>
+              </div>
+              {/* 수동 점수 입력 섹션 추가 */}
+              <div className="mt-6">
+                <ManualScoreInput exams={exams} students={students} />
               </div>
             </div>
           )}
