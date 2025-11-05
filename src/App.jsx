@@ -15,12 +15,14 @@ import CurriculumManager from './components/CurriculumManager';
 import AttendanceManager from './components/AttendanceManager';
 import ProblemGenerator from './components/ProblemGenerator';
 import ProblemSolver from './components/ProblemSolver';
+import ProblemAnalysis from './components/ProblemAnalysis';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('problem');
   const [problemAnalysisList, setProblemAnalysisList] = useState([]);
+  const [homeworks, setHomeworks] = useState([]);
   
   const [students, setStudents] = useState([
     { id: 'student1', name: '김민수', grade: '중3', phone: '010-1234-5678', birthDate: '0315', password: 'pass123', exams: [] }
@@ -68,10 +70,6 @@ export default function App() {
   const [selectedExam, setSelectedExam] = useState(null);
   const [examResult, setExamResult] = useState(null);
   const [editingExam, setEditingExam] = useState(null);
-  const [problemImage, setProblemImage] = useState(null);
-  const [problemImagePreview, setProblemImagePreview] = useState('');
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
   const [batchGrading, setBatchGrading] = useState({
     selectedExam: null,
     omrList: []
@@ -94,17 +92,20 @@ export default function App() {
         const studentData = studentDoc.data();
         setCurrentUser({ type: 'student', id: studentData.id, name: studentData.name, exams: studentData.exams });
       } else {
-        setCurrentUser({ type: 'admin', name: '관리자' });
+        // admin@admin.com 계정만 관리자로 인정
+        if (email === 'admin@admin.com') {
+          setCurrentUser({ type: 'admin', name: '관리자' });
+        } else {
+          // 등록되지 않은 사용자는 로그아웃
+          await signOut(auth);
+          setCurrentUser(null);
+          alert('등록되지 않은 사용자입니다. 관리자에게 문의하세요.');
+        }
       }
       setLoading(false);
     } else {
-      // Firebase Auth에 로그인 안 되어 있으면 localStorage 확인
-      const savedUser = localStorage.getItem('currentUser'); // ← 추가
-      if (savedUser) {
-        setCurrentUser(JSON.parse(savedUser)); // ← 추가
-      } else {
-        setCurrentUser(null);
-      }
+      // Firebase Auth 로그인 안 되어 있으면 무조건 null
+      setCurrentUser(null);
       setLoading(false);
     }
   });
@@ -124,37 +125,6 @@ useEffect(() => {
     }
   });
  
-  // 이미지 선택 핸들러
-const handleProblemImageSelect = (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    setProblemImage(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setProblemImagePreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-  }
-};
-
-// 분석 리셋
-const resetAnalysis = () => {
-  setProblemImage(null);
-  setProblemImagePreview(null);
-  setAnalysisResult(null);
-  setAnalyzing(false);
-};
-
-// 문제 분석 함수
-const analyzeProblem = async () => {
-  setAnalyzing(true);
-  // AI 분석 로직 (나중에 구현)
-  setTimeout(() => {
-    alert('AI 분석 기능 준비 중!');
-    setAnalyzing(false);
-  }, 2000);
-};
-
   // 시험 데이터 로드
   const examsRef = collection(db, 'exams');
   const unsubscribeExams = onSnapshot(examsRef, (snapshot) => {
@@ -168,19 +138,30 @@ const analyzeProblem = async () => {
   });
 
   // 문제 분석 데이터 로드
-const problemAnalysisRef = collection(db, 'problemAnalysis');
-const unsubscribeProblemAnalysis = onSnapshot(problemAnalysisRef, (snapshot) => {
+  const problemAnalysisRef = collection(db, 'problemAnalysis');
+  const unsubscribeProblemAnalysis = onSnapshot(problemAnalysisRef, (snapshot) => {
   const analysisData = snapshot.docs.map(doc => ({
     id: doc.id,
     ...doc.data()
   }));
   setProblemAnalysisList(analysisData);
-});
+  });
+
+  // 숙제 데이터 로드
+  const homeworksRef = collection(db, 'assignments');
+  const unsubscribeHomeworks = onSnapshot(homeworksRef, (snapshot) => {
+    const homeworksData = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    setHomeworks(homeworksData);
+  });
 
   return () => {
     unsubscribeStudents();
     unsubscribeExams();
     unsubscribeProblemAnalysis();
+    unsubscribeHomeworks();
   };
 }, []);
 
@@ -188,13 +169,16 @@ const unsubscribeProblemAnalysis = onSnapshot(problemAnalysisRef, (snapshot) => 
  const handleLogin = async (e) => {
   e.preventDefault();
   
-  // 관리자 로그인 체크 (Firebase Auth 없이)
-  if (loginForm.id === 'admin' && loginForm.password === 'admin123') {
-    const adminUser = { type: 'admin', name: '관리자' };
-    setCurrentUser(adminUser);
-    localStorage.setItem('currentUser', JSON.stringify(adminUser)); // ← 추가
-    setActiveTab('students');
-    return;
+  // 관리자 로그인을 Firebase Auth로 통일
+  if (loginForm.id === 'admin') {
+    try {
+      await signInWithEmailAndPassword(auth, 'admin@admin.com', loginForm.password);
+      setActiveTab('students');
+      return;
+    } catch (error) {
+      alert('관리자 로그인 실패: ' + error.message);
+      return;
+    }
   }
   
   try {
@@ -1701,84 +1685,7 @@ if (loading) {
 <div className="max-w-7xl mx-auto px-4 py-8">
 
 {activeTab === 'problem' && (
-  <div className="bg-white rounded-2xl shadow-lg p-8">
-    <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 text-transparent bg-clip-text">
-      📖 문제 분석 요청
-    </h2>
-    
-    <div className="text-gray-600 mb-6">
-      틀린 문제 사진을 업로드하면 AI가 자동으로 분석해드립니다.
-    </div>
-
-    {!problemImagePreview ? (
-      <div className="border-2 border-dashed border-indigo-300 rounded-xl p-12 text-center mb-6">
-        <label className="cursor-pointer">
-          <div className="space-y-4">
-            <div className="text-6xl">📷</div>
-            <div className="text-gray-600">이미지를 업로드하세요</div>
-            <div className="text-sm text-gray-400">클릭하거나 파일을 드래그하세요</div>
-          </div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleProblemImageSelect}
-            className="hidden"
-          />
-        </label>
-      </div>
-    ) : (
-      <div className="mb-6 space-y-4">
-        <img 
-          src={problemImagePreview} 
-          alt="문제 미리보기"
-          className="max-w-full h-auto rounded-lg shadow-lg"
-          style={{ maxHeight: '400px' }}
-        />
-        <div className="flex gap-4">
-          <button
-            onClick={resetAnalysis}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
-          >
-            다른 사진 선택
-          </button>
-          <button
-            onClick={analyzeProblem}
-            disabled={analyzing}
-            className={`px-6 py-2 rounded-lg text-white font-medium ${
-              analyzing 
-                ? 'bg-gray-400 cursor-not-allowed' 
-                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-lg'
-            }`}
-          >
-            {analyzing ? '분석 중...' : '문제 분석하기'}
-          </button>
-        </div>
-      </div>
-    )}
-
-    {analysisResult && (
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 mt-6">
-        <h3 className="text-lg font-bold mb-4 text-indigo-600">📝 AI 분석 결과</h3>
-        <div className="prose prose-sm max-w-none">
-          <pre className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed">
-            {analysisResult}
-          </pre>
-        </div>
-      </div>
-    )}
-
-    {analyzing && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-8 max-w-sm">
-          <div className="text-center space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <div className="text-lg font-medium">문제를 분석하고 있습니다...</div>
-            <div className="text-sm text-gray-500">잠시만 기다려주세요</div>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
+  <ProblemAnalysis currentUser={currentUser} />
 )}
 
 {activeTab === 'problemgen' && (
@@ -1957,7 +1864,12 @@ if (loading) {
           </div>
         )}
 
-        {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} />}
+        {activeTab === 'homework' && (
+          <>
+           <div>homeworks 확인: {homeworks ? homeworks.length : 'undefined'}</div>
+           <HomeworkSubmission currentUser={currentUser} homeworks={homeworks || []} />
+         </>
+        )}
 
         {activeTab === 'mypage' && (
           <div className="bg-white rounded-2xl shadow-lg p-8">

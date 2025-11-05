@@ -81,7 +81,7 @@ const HomeworkManager = () => {
   const loadSubmissions = async (assignmentId) => {
     try {
       const q = query(
-        collection(db, 'submissions'),
+        collection(db, 'homeworkSubmissions'),
         orderBy('submittedAt', 'desc')
       );
       const snapshot = await getDocs(q);
@@ -90,7 +90,7 @@ const HomeworkManager = () => {
           id: doc.id,
           ...doc.data()
         }))
-        .filter(sub => sub.assignmentId === assignmentId);
+        .filter(sub => sub.homeworkId === assignmentId);
       setSubmissions(submissionList);
     } catch (error) {
       console.error('제출 기록 불러오기 실패:', error);
@@ -163,7 +163,7 @@ const HomeworkManager = () => {
 
     try {
       // 1. 먼저 이 과제의 모든 제출물 삭제
-      const submissionsRef = collection(db, 'submissions');
+      const submissionsRef = collection(db, 'homeworkSubmissions');
       const q = query(submissionsRef, where('assignmentId', '==', assignmentId));
       const submissionsSnapshot = await getDocs(q);
       
@@ -221,7 +221,7 @@ const HomeworkManager = () => {
       const selectedStudentsList = students.filter(s => selectedStudents.includes(s.id));
       
       const submittedStudents = submissions.filter(sub => 
-        sub.assignmentId === assignment.id && selectedStudents.includes(sub.studentId)
+        sub.homeworkId === assignment.id && selectedStudents.includes(sub.studentId)
       );
       const submittedStudentIds = submittedStudents.map(sub => sub.studentId);
       const notSubmittedStudents = selectedStudentsList.filter(student => 
@@ -545,9 +545,9 @@ const HomeworkManager = () => {
                           제출 시간: {submission.submittedAt && new Date(submission.submittedAt.seconds * 1000).toLocaleString('ko-KR')}
                         </p>
                       </div>
-                      {submission.fileUrl && (
+                      {submission.files?.[0]?.url && (
                         <a
-                          href={submission.fileUrl}
+                          href={submission.files?.[0]?.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{
