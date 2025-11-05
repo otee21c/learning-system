@@ -93,7 +93,7 @@ export default function App() {
         setCurrentUser({ type: 'student', id: studentData.id, name: studentData.name, exams: studentData.exams });
       } else {
         // admin@admin.com 계정만 관리자로 인정
-        if (email === 'admin@admin.com') {
+        if (email === 'admin@test.com') {
           setCurrentUser({ type: 'admin', name: '관리자' });
         } else {
           // 등록되지 않은 사용자는 로그아웃
@@ -113,6 +113,11 @@ export default function App() {
   return () => unsubscribe();
 }, []);
 useEffect(() => {
+  // 로그인된 사용자만 데이터 로드
+  if (!currentUser) {
+    return; // 로그인 안 되어 있으면 아무것도 안 함
+  }
+
   // 학생 데이터 로드
   const studentsRef = collection(db, 'students');
   const unsubscribeStudents = onSnapshot(studentsRef, (snapshot) => {
@@ -163,7 +168,7 @@ useEffect(() => {
     unsubscribeProblemAnalysis();
     unsubscribeHomeworks();
   };
-}, []);
+}, [currentUser]); // ← 여기 중요! [] 에서 [currentUser]로 변경
 
   // 시험 데이터 로드
  const handleLogin = async (e) => {
@@ -172,7 +177,7 @@ useEffect(() => {
   // 관리자 로그인을 Firebase Auth로 통일
   if (loginForm.id === 'admin') {
     try {
-      await signInWithEmailAndPassword(auth, 'admin@admin.com', loginForm.password);
+      await signInWithEmailAndPassword(auth, 'admin@test.com', loginForm.password);
       setActiveTab('students');
       return;
     } catch (error) {
