@@ -221,39 +221,49 @@ export default function NotificationManager() {
     }
   };
 
-  // SMS 발송 함수 (Vercel Serverless Function 호출)
+  // SMS 발송 함수 (브라우저에서 직접 Aligo API 호출)
   const sendSMS = async (phoneNumber, message) => {
     try {
-      // Vercel Serverless Function 호출
-      const response = await fetch('/api/send-sms', {
+      // 환경변수에서 Aligo API 정보 가져오기
+      const apiKey = import.meta.env.VITE_ALIGO_API_KEY;
+      const userId = import.meta.env.VITE_ALIGO_USER_ID;
+      const sender = import.meta.env.VITE_ALIGO_SENDER;
+
+      if (!apiKey || !userId || !sender) {
+        console.error('❌ Aligo API 설정이 없습니다. .env 파일을 확인하세요.');
+        alert('SMS 발송 설정이 올바르지 않습니다.');
+        return false;
+      }
+
+      // 전화번호 형식 정리 (하이픈 제거)
+      const cleanPhone = phoneNumber.replace(/-/g, '');
+
+      // Aligo API 호출을 위한 FormData 생성
+      const formData = new URLSearchParams();
+      formData.append('key', apiKey);
+      formData.append('user_id', userId);
+      formData.append('sender', sender);
+      formData.append('receiver', cleanPhone);
+      formData.append('msg', message);
+      formData.append('testmode_yn', 'N'); // 실제 발송
+
+      // Aligo API 직접 호출
+      const response = await fetch('https://apis.aligo.in/send/', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: JSON.stringify({
-          phoneNumber,
-          message
-        })
+        body: formData.toString()
       });
 
       const result = await response.json();
       
-      // 🔍 Vercel Function IP 출력
-      if (result.vercelIP) {
-        console.log('📍 Vercel Function IP:', result.vercelIP);
-      }
-      
-      if (result.success) {
-        console.log('✅ SMS 발송 성공:', phoneNumber);
+      if (result.result_code === '1') {
+        console.log('✅ SMS 발송 성공:', cleanPhone);
         return true;
       } else {
         console.error('❌ SMS 발송 실패:', result.message);
-        if (result.vercelIP) {
-          console.error('📍 요청한 IP:', result.vercelIP);
-        }
-        if (result.aligoError) {
-          console.error('📋 Aligo 에러 상세:', result.aligoError);
-        }
+        console.error('📋 Aligo 에러 상세:', result);
         return false;
       }
     } catch (error) {
