@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../../firebase';
+import { getMonthWeek } from '../../utils/dateUtils';
 
 const CurriculumManager = () => {
   const [curriculums, setCurriculums] = useState([]);
@@ -46,8 +47,13 @@ const CurriculumManager = () => {
     }
 
     try {
+      // startDate가 있으면 그것으로, 없으면 현재 날짜로 month 계산
+      const dateForMonth = formData.startDate || new Date().toISOString().split('T')[0];
+      const { month } = getMonthWeek(dateForMonth);
+      
       const curriculumData = {
         weekNumber: parseInt(formData.weekNumber),
+        month: month,
         title: formData.title,
         description: formData.description,
         topics: formData.topics.split(',').map(t => t.trim()).filter(t => t),
@@ -323,8 +329,22 @@ const CurriculumManager = () => {
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '15px' }}>
                   <div>
-                    <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>
-                      {curriculum.weekNumber}주차
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '14px', color: '#666' }}>
+                        {curriculum.weekNumber}주차
+                      </span>
+                      {curriculum.month && (
+                        <span style={{
+                          padding: '3px 10px',
+                          backgroundColor: '#fef3c7',
+                          color: '#b45309',
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          borderRadius: '10px'
+                        }}>
+                          {curriculum.month}월
+                        </span>
+                      )}
                     </div>
                     <h3 style={{ margin: '0 0 10px 0', color: '#1f2937' }}>
                       {curriculum.title}

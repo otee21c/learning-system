@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc } from 'firebase/firestore';
-import { storage, db } from '../firebase';
+import { storage, db } from "../../firebase";
 
 export default function ProblemAnalysis({ currentUser }) {
   const [problemFiles, setProblemFiles] = useState([]);

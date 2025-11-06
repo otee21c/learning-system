@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../../firebase';
+import { getMonthWeek } from '../../utils/dateUtils';
 
 const AttendanceManager = () => {
   const [students, setStudents] = useState([]);
@@ -82,10 +83,14 @@ const AttendanceManager = () => {
         const attendance = todayAttendance[student.id];
         if (!attendance || !attendance.status) continue;
 
+        const { month, week } = getMonthWeek(selectedDate);
+        
         const attendanceData = {
           studentId: student.id,
           studentName: student.name,
           date: selectedDate,
+          month: month,
+          week: week,
           status: attendance.status,
           note: attendance.note || '',
           timestamp: new Date()
@@ -157,6 +162,21 @@ const AttendanceManager = () => {
               fontSize: '16px'
             }}
           />
+          {selectedDate && (() => {
+            const { month, week } = getMonthWeek(selectedDate);
+            return (
+              <span style={{
+                padding: '8px 16px',
+                backgroundColor: '#fef3c7',
+                color: '#b45309',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                borderRadius: '12px'
+              }}>
+                {month}월 {week}주차
+              </span>
+            );
+          })()}
           <div style={{ marginLeft: 'auto', color: '#666' }}>
             총 {students.length}명
           </div>

@@ -10,7 +10,8 @@ import {
   deleteDoc,
   doc
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from '../../firebase';
+import { getMonthWeek } from '../../utils/dateUtils';
 
 // SMS 발송 함수
 const sendSMS = async (phoneNumber, message) => {
@@ -140,8 +141,12 @@ const HomeworkManager = () => {
     }
 
     try {
+      const { month, week } = getMonthWeek(newAssignment.dueDate);
+      
       await addDoc(collection(db, 'assignments'), {
         ...newAssignment,
+        month: month,
+        week: week,
         createdAt: serverTimestamp(),
         status: 'active'
       });
@@ -408,7 +413,21 @@ const HomeworkManager = () => {
                   cursor: 'pointer'
                 }}
               >
-                <h4 style={{ margin: '0 0 10px 0' }}>{assignment.title}</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                  <h4 style={{ margin: 0 }}>{assignment.title}</h4>
+                  {assignment.month && assignment.week && (
+                    <span style={{
+                      padding: '4px 12px',
+                      backgroundColor: '#fef3c7',
+                      color: '#b45309',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      borderRadius: '12px'
+                    }}>
+                      {assignment.month}월 {assignment.week}주차
+                    </span>
+                  )}
+                </div>
                 <p style={{ color: '#666', margin: '5px 0' }}>{assignment.description}</p>
                 <p style={{ color: '#999', fontSize: '14px', margin: '10px 0 0 0' }}>
                   📅 마감일: {assignment.dueDate}

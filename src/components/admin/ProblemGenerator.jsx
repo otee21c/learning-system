@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase.js';
+import { db, storage } from '../../firebase.js';
 import { FileText, Sparkles, Trash2, CheckCircle } from 'lucide-react';
 import OpenAI from 'openai';
 

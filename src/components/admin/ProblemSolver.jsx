@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, addDoc, query, where, orderBy } from 'firebase/firestore';
-import { db } from '../firebase.js';
+import { db } from '../../firebase.js';
 import { BookOpen, CheckCircle, XCircle, Sparkles } from 'lucide-react';
 
 const ProblemSolver = ({ studentId }) => {
