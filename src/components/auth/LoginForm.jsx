@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
+import { BookOpen } from 'lucide-react';
 
 export default function LoginForm() {
   const [loginForm, setLoginForm] = useState({ id: '', password: '' });
@@ -35,51 +36,79 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* 메인 카드 */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+          {/* 책 아이콘 */}
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-white/20 backdrop-blur-sm rounded-3xl mb-6">
+            <BookOpen className="w-12 h-12 text-white" strokeWidth={2} />
+          </div>
+          
+          {/* 타이틀 */}
+          <h1 className="text-4xl font-bold text-white mb-3">
             오늘의 국어 연구소
           </h1>
-          <p className="text-gray-600">학습 관리 시스템</p>
+          <p className="text-purple-100 text-lg">
+            스마트한 학습 관리의 시작
+          </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        {/* 로그인 폼 */}
+        <form onSubmit={handleLogin} className="space-y-4">
+          {/* 아이디 입력 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-white text-sm font-medium mb-2 ml-1">
               아이디
             </label>
             <input
               type="text"
               value={loginForm.id}
               onChange={(e) => setLoginForm({ ...loginForm, id: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="w-full px-5 py-4 bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-2xl text-white placeholder-purple-200 focus:outline-none focus:border-white/60 transition-all"
               placeholder="아이디를 입력하세요"
               required
             />
           </div>
 
+          {/* 비밀번호 입력 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-white text-sm font-medium mb-2 ml-1">
               비밀번호
             </label>
             <input
               type="password"
               value={loginForm.password}
               onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="w-full px-5 py-4 bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-2xl text-white placeholder-purple-200 focus:outline-none focus:border-white/60 transition-all"
               placeholder="비밀번호를 입력하세요"
               required
             />
           </div>
 
+          {/* 로그인 버튼 */}
           <button
             type="submit"
-            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 rounded-xl hover:shadow-lg transition-all font-semibold text-lg"
+            className="w-full bg-white text-purple-700 py-4 rounded-2xl hover:bg-purple-50 transition-all font-bold text-lg shadow-xl mt-6"
           >
             로그인
           </button>
         </form>
+
+        {/* 하단 로고 */}
+        <div className="mt-8 p-6 bg-white/20 backdrop-blur-sm rounded-3xl border-2 border-white/30">
+          <div className="flex items-center justify-center">
+            {/* 로고 이미지가 있다면 여기에 표시 */}
+            {/* <img src="/logo.png" alt="오늘의국어" className="h-32" /> */}
+            
+            {/* 임시 로고 텍스트 (이미지 추가 전까지) */}
+            <div className="text-center">
+              <div className="w-40 h-40 bg-white rounded-2xl flex items-center justify-center mb-2">
+                <span className="text-4xl font-bold text-purple-700">오늘의국어</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
