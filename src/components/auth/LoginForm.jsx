@@ -46,10 +46,10 @@ export default function LoginForm() {
           </div>
           
           {/* 타이틀 */}
-          <h1 className="text-4xl font-bold text-white mb-3">
+          <h1 className="text-5xl font-bold text-white mb-3">
             오늘의 국어 연구소
           </h1>
-          <p className="text-purple-100 text-lg">
+          <p className="text-purple-100 text-xl">
             스마트한 학습 관리의 시작
           </p>
         </div>
@@ -96,17 +96,14 @@ export default function LoginForm() {
         </form>
 
         {/* 하단 로고 */}
-        <div className="mt-8 p-6 bg-white/20 backdrop-blur-sm rounded-3xl border-2 border-white/30">
+        <div className="mt-8 p-8 bg-white/10 backdrop-blur-sm rounded-3xl border-2 border-white/20">
           <div className="flex items-center justify-center">
-            {/* 로고 이미지가 있다면 여기에 표시 */}
-            {/* <img src="/logo.png" alt="오늘의국어" className="h-32" /> */}
-            
-            {/* 임시 로고 텍스트 (이미지 추가 전까지) */}
-            <div className="text-center">
-              <div className="w-40 h-40 bg-white rounded-2xl flex items-center justify-center mb-2">
-                <span className="text-4xl font-bold text-purple-700">오늘의국어</span>
-              </div>
-            </div>
+            {/* 오늘의국어 로고 이미지 */}
+            <img 
+              src="/logo.png" 
+              alt="오늘의 국어 연구소 로고" 
+              className="h-48 w-48 object-contain drop-shadow-2xl" 
+            />
           </div>
         </div>
       </div>
