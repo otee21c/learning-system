@@ -22,7 +22,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // 🔍 Vercel Function의 실제 IP 확인
+  let vercelIP = 'unknown';
+  
   try {
+    try {
+      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipResponse.json();
+      vercelIP = ipData.ip;
+      console.log('🌐 Vercel Function IP:', vercelIP);
+    } catch (ipError) {
+      console.error('IP 확인 실패:', ipError);
+    }
+
     const { phoneNumber, message } = req.body;
 
     if (!phoneNumber || !message) {
@@ -72,21 +84,27 @@ export default async function handler(req, res) {
       return res.status(200).json({ 
         success: true, 
         message: 'SMS 발송 성공',
+        vercelIP: vercelIP,
         data: result
       });
     } else {
       console.error('❌ SMS 발송 실패:', result.message);
+      console.error('📍 Vercel IP:', vercelIP);
       return res.status(400).json({ 
         success: false, 
-        message: result.message || 'SMS 발송 실패'
+        message: result.message || 'SMS 발송 실패',
+        vercelIP: vercelIP,
+        aligoError: result
       });
     }
 
   } catch (error) {
     console.error('SMS 발송 중 오류:', error);
+    console.error('📍 Vercel IP:', vercelIP);
     return res.status(500).json({ 
       success: false, 
       message: 'SMS 발송 중 오류가 발생했습니다.',
+      vercelIP: vercelIP,
       error: error.message 
     });
   }

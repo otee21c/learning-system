@@ -238,11 +238,22 @@ export default function NotificationManager() {
 
       const result = await response.json();
       
+      // 🔍 Vercel Function IP 출력
+      if (result.vercelIP) {
+        console.log('📍 Vercel Function IP:', result.vercelIP);
+      }
+      
       if (result.success) {
         console.log('✅ SMS 발송 성공:', phoneNumber);
         return true;
       } else {
         console.error('❌ SMS 발송 실패:', result.message);
+        if (result.vercelIP) {
+          console.error('📍 요청한 IP:', result.vercelIP);
+        }
+        if (result.aligoError) {
+          console.error('📋 Aligo 에러 상세:', result.aligoError);
+        }
         return false;
       }
     } catch (error) {
