@@ -1622,11 +1622,7 @@ if (loading) {
                   ))}
                 </div>
               </div>
-
-              {/* 수동 점수 입력 */}
-              <ManualScoreInput exams={exams} students={students} />
             </div>
-              
           )}
         </div>
       </div>
