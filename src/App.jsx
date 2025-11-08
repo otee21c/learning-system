@@ -193,7 +193,7 @@ export default function App() {
               {activeTab === 'problem-assignment' && <ProblemAssignmentManager students={students} />}
               {activeTab === 'problem-analysis' && <ProblemAnalysisManager problemAnalysisList={problemAnalysisList} />}
               {activeTab === 'notification' && <NotificationManager students={students} />}
-              {activeTab === 'curriculum' && <CurriculumManager />}
+              {activeTab === 'curriculum' && <CurriculumManager students={students} />}
               {activeTab === 'attendance' && <AttendanceManager students={students} />}
               {activeTab === 'problem-generator' && <ProblemGenerator />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
