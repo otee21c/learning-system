@@ -116,9 +116,11 @@ export default function NotificationManager() {
 
     // 선택된 월/주차의 커리큘럼
     if (includeCurriculum && curriculumList.length > 0) {
-      // 선택된 월/주차에 해당하는 커리큘럼 찾기
+      // 선택된 월/주차에 해당하고 해당 학생이 포함된 커리큘럼 찾기
       const selectedCurriculum = curriculumList.find(c => 
-        c.month === selectedMonth && c.weekNumber === selectedWeek
+        c.month === selectedMonth && 
+        c.weekNumber === selectedWeek &&
+        c.students?.includes(student.id) // 학생 ID가 포함된 커리큘럼
       );
       if (selectedCurriculum) {
         preview += `📅 ${selectedMonth}월 ${selectedWeek}주차 진도\n`;
@@ -296,7 +298,9 @@ export default function NotificationManager() {
         // 선택된 월/주차의 커리큘럼
         if (includeCurriculum && curriculumList.length > 0) {
           const selectedCurriculum = curriculumList.find(c => 
-            c.month === selectedMonth && c.weekNumber === selectedWeek
+            c.month === selectedMonth && 
+            c.weekNumber === selectedWeek &&
+            c.students?.includes(student.id) // 학생 ID가 포함된 커리큘럼
           );
           if (selectedCurriculum) {
             notificationContent += `📅 ${selectedMonth}월 ${selectedWeek}주차 진도\n`;

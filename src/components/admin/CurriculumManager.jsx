@@ -3,7 +3,7 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy 
 import { db } from '../../firebase';
 import { getMonthWeek } from '../../utils/dateUtils';
 
-const CurriculumManager = () => {
+const CurriculumManager = ({ students = [] }) => {
   const [curriculums, setCurriculums] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingCurriculum, setEditingCurriculum] = useState(null);
@@ -14,7 +14,8 @@ const CurriculumManager = () => {
     topics: '',
     startDate: '',
     endDate: '',
-    materials: ''
+    materials: '',
+    selectedStudents: [] // 선택된 학생 ID 배열
   });
 
   // 커리큘럼 목록 로드
@@ -46,6 +47,11 @@ const CurriculumManager = () => {
       return;
     }
 
+    if (formData.selectedStudents.length === 0) {
+      alert('최소 1명 이상의 학생을 선택해주세요.');
+      return;
+    }
+
     try {
       // startDate가 있으면 그것으로, 없으면 현재 날짜로 month 계산
       const dateForMonth = formData.startDate || new Date().toISOString().split('T')[0];
@@ -60,6 +66,7 @@ const CurriculumManager = () => {
         startDate: formData.startDate,
         endDate: formData.endDate,
         materials: formData.materials,
+        students: formData.selectedStudents, // 선택된 학생 ID 배열
         updatedAt: new Date()
       };
 
@@ -82,7 +89,8 @@ const CurriculumManager = () => {
         topics: '',
         startDate: '',
         endDate: '',
-        materials: ''
+        materials: '',
+        selectedStudents: []
       });
       setShowForm(false);
       setEditingCurriculum(null);
@@ -103,7 +111,8 @@ const CurriculumManager = () => {
       topics: curriculum.topics?.join(', ') || '',
       startDate: curriculum.startDate || '',
       endDate: curriculum.endDate || '',
-      materials: curriculum.materials || ''
+      materials: curriculum.materials || '',
+      selectedStudents: curriculum.students || []
     });
     setShowForm(true);
   };
@@ -290,6 +299,81 @@ const CurriculumManager = () => {
               />
             </div>
 
+            {/* 학생 선택 */}
+            <div style={{ marginBottom: '15px', border: '2px solid #e0e0e0', borderRadius: '8px', padding: '15px', backgroundColor: '#fff' }}>
+              <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', fontSize: '16px', color: '#333' }}>
+                학생 선택 * (복수 선택 가능)
+              </label>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+                gap: '10px',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                padding: '10px',
+                backgroundColor: '#f9f9f9',
+                borderRadius: '6px'
+              }}>
+                {students.length > 0 ? (
+                  students.map(student => (
+                    <label 
+                      key={student.id} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        padding: '8px 12px',
+                        backgroundColor: formData.selectedStudents.includes(student.id) ? '#e0f2fe' : 'white',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!formData.selectedStudents.includes(student.id)) {
+                          e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!formData.selectedStudents.includes(student.id)) {
+                          e.currentTarget.style.backgroundColor = 'white';
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.selectedStudents.includes(student.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({
+                              ...formData,
+                              selectedStudents: [...formData.selectedStudents, student.id]
+                            });
+                          } else {
+                            setFormData({
+                              ...formData,
+                              selectedStudents: formData.selectedStudents.filter(id => id !== student.id)
+                            });
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '14px', fontWeight: '500' }}>
+                        {student.name} ({student.grade})
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p style={{ color: '#999', textAlign: 'center', padding: '20px' }}>
+                    등록된 학생이 없습니다.
+                  </p>
+                )}
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '13px', color: '#666' }}>
+                선택된 학생: {formData.selectedStudents.length}명
+              </div>
+            </div>
+
             <button
               type="submit"
               style={{
@@ -407,7 +491,7 @@ const CurriculumManager = () => {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#666' }}>
+                <div style={{ display: 'flex', gap: '20px', fontSize: '14px', color: '#666', marginBottom: '10px' }}>
                   {curriculum.startDate && (
                     <span>📅 {curriculum.startDate} ~ {curriculum.endDate || '진행중'}</span>
                   )}
@@ -415,6 +499,39 @@ const CurriculumManager = () => {
                     <span>📚 {curriculum.materials}</span>
                   )}
                 </div>
+
+                {/* 선택된 학생 목록 */}
+                {curriculum.students && curriculum.students.length > 0 && (
+                  <div style={{ 
+                    marginTop: '10px', 
+                    padding: '12px', 
+                    backgroundColor: '#f0fdf4', 
+                    borderRadius: '6px',
+                    border: '1px solid #bbf7d0'
+                  }}>
+                    <strong style={{ fontSize: '14px', color: '#15803d' }}>👥 적용 학생 ({curriculum.students.length}명):</strong>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                      {curriculum.students.map(studentId => {
+                        const student = students.find(s => s.id === studentId);
+                        return student ? (
+                          <span
+                            key={studentId}
+                            style={{
+                              padding: '4px 10px',
+                              backgroundColor: '#dcfce7',
+                              color: '#166534',
+                              borderRadius: '10px',
+                              fontSize: '13px',
+                              fontWeight: '500'
+                            }}
+                          >
+                            {student.name} ({student.grade})
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
