@@ -112,7 +112,7 @@ export default function NotificationManager() {
 
   // 메시지 미리보기 생성
   const generatePreview = (student) => {
-    let preview = `📢 ${student.name} 학생 알림장\n\n`;
+    let preview = `★ ${student.name} 학생 알림장\n\n`;
 
     // 선택된 월/주차의 커리큘럼
     if (includeCurriculum && curriculumList.length > 0) {
@@ -123,7 +123,7 @@ export default function NotificationManager() {
         c.students?.includes(student.id) // 학생 ID가 포함된 커리큘럼
       );
       if (selectedCurriculum) {
-        preview += `📅 ${selectedMonth}월 ${selectedWeek}주차 진도\n`;
+        preview += `★ ${selectedMonth}월 ${selectedWeek}주차 진도\n`;
         preview += `- ${selectedCurriculum.weekNumber}주차: ${selectedCurriculum.title}\n`;
         if (selectedCurriculum.topics && selectedCurriculum.topics.length > 0) {
           preview += `- 학습 주제: ${selectedCurriculum.topics.join(', ')}\n`;
@@ -145,10 +145,10 @@ export default function NotificationManager() {
         const totalCount = selectedWeekAttendance.length;
         const rate = Math.round((presentCount / totalCount) * 100);
         
-        preview += `📊 ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
+        preview += `★ ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
         preview += `- 출석: ${presentCount}/${totalCount}회 (${rate}%)\n\n`;
       } else {
-        preview += `📊 ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
+        preview += `★ ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
         preview += '- 해당 기간 출석 기록이 없습니다.\n\n';
       }
     }
@@ -159,7 +159,7 @@ export default function NotificationManager() {
         ? student.exams[student.exams.length - 1] 
         : null;
       
-      preview += '📝 최근 시험 결과\n';
+      preview += '★ 최근 시험 결과\n';
       if (recentExam) {
         preview += `- 시험명: ${recentExam.examTitle}\n`;
         preview += `- 점수: ${recentExam.totalScore}점 / ${recentExam.maxScore}점 (${recentExam.percentage}%)\n`;
@@ -175,7 +175,7 @@ export default function NotificationManager() {
         hw.month === selectedMonth && hw.week === selectedWeek
       );
       
-      preview += `📚 ${selectedMonth}월 ${selectedWeek}주차 과제\n`;
+      preview += `★ ${selectedMonth}월 ${selectedWeek}주차 과제\n`;
       if (selectedWeekHomework.length > 0) {
         selectedWeekHomework.forEach(hw => {
           preview += `- ${hw.title} (마감: ${hw.dueDate})\n`;
@@ -190,7 +190,7 @@ export default function NotificationManager() {
 
     // 작성한 메시지
     if (message.trim()) {
-      preview += '💬 선생님 메시지\n';
+      preview += '● 선생님 메시지\n';
       preview += message + '\n';
     }
 
@@ -293,7 +293,7 @@ export default function NotificationManager() {
         const student = students.find(s => s.id === studentId);
         if (!student) continue;
 
-        let notificationContent = `📢 ${student.name} 학생 알림장\n\n`;
+        let notificationContent = `★ ${student.name} 학생 알림장\n\n`;
 
         // 선택된 월/주차의 커리큘럼
         if (includeCurriculum && curriculumList.length > 0) {
@@ -303,7 +303,7 @@ export default function NotificationManager() {
             c.students?.includes(student.id) // 학생 ID가 포함된 커리큘럼
           );
           if (selectedCurriculum) {
-            notificationContent += `📅 ${selectedMonth}월 ${selectedWeek}주차 진도\n`;
+            notificationContent += `★ ${selectedMonth}월 ${selectedWeek}주차 진도\n`;
             notificationContent += `- ${selectedCurriculum.weekNumber}주차: ${selectedCurriculum.title}\n`;
             if (selectedCurriculum.topics && selectedCurriculum.topics.length > 0) {
               notificationContent += `- 학습 주제: ${selectedCurriculum.topics.join(', ')}\n`;
@@ -324,10 +324,10 @@ export default function NotificationManager() {
             const totalCount = selectedWeekAttendance.length;
             const rate = Math.round((presentCount / totalCount) * 100);
             
-            notificationContent += `📊 ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
+            notificationContent += `★ ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
             notificationContent += `- 출석: ${presentCount}/${totalCount}회 (${rate}%)\n\n`;
           } else {
-            notificationContent += `📊 ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
+            notificationContent += `★ ${selectedMonth}월 ${selectedWeek}주차 출결 현황\n`;
             notificationContent += '- 해당 기간 출석 기록이 없습니다.\n\n';
           }
         }
@@ -338,7 +338,7 @@ export default function NotificationManager() {
             ? student.exams[student.exams.length - 1] 
             : null;
           
-          notificationContent += '📝 최근 시험 결과\n';
+          notificationContent += '★ 최근 시험 결과\n';
           if (recentExam) {
             notificationContent += `- 시험명: ${recentExam.examTitle}\n`;
             notificationContent += `- 점수: ${recentExam.totalScore}점 / ${recentExam.maxScore}점 (${recentExam.percentage}%)\n`;
@@ -354,7 +354,7 @@ export default function NotificationManager() {
             hw.month === selectedMonth && hw.week === selectedWeek
           );
           
-          notificationContent += `📚 ${selectedMonth}월 ${selectedWeek}주차 과제\n`;
+          notificationContent += `★ ${selectedMonth}월 ${selectedWeek}주차 과제\n`;
           if (selectedWeekHomework.length > 0) {
             selectedWeekHomework.forEach(hw => {
               notificationContent += `- ${hw.title} (마감: ${hw.dueDate})\n`;
@@ -369,7 +369,7 @@ export default function NotificationManager() {
         
         // 작성한 메시지 추가
         if (message.trim()) {
-          notificationContent += '💬 선생님 메시지\n';
+          notificationContent += '● 선생님 메시지\n';
           notificationContent += message + '\n';
         }
 
@@ -639,7 +639,7 @@ export default function NotificationManager() {
                 className="w-5 h-5 rounded border-gray-300"
               />
               <div>
-                <span className="text-gray-700 font-medium">📚 커리큘럼</span>
+                <span className="text-gray-700 font-medium">★ 커리큘럼</span>
                 <p className="text-xs text-gray-500 mt-1">이번 주 진도 자동 포함</p>
               </div>
             </label>
@@ -665,7 +665,7 @@ export default function NotificationManager() {
                 className="w-5 h-5 rounded border-gray-300"
               />
               <div>
-                <span className="text-gray-700 font-medium">📝 시험 성적</span>
+                <span className="text-gray-700 font-medium">★ 시험 성적</span>
                 <p className="text-xs text-gray-500 mt-1">최근 시험 결과 자동 포함</p>
               </div>
             </label>
@@ -678,7 +678,7 @@ export default function NotificationManager() {
                 className="w-5 h-5 rounded border-gray-300"
               />
               <div>
-                <span className="text-gray-700 font-medium">📚 과제 안내</span>
+                <span className="text-gray-700 font-medium">★ 과제 안내</span>
                 <p className="text-xs text-gray-500 mt-1">최근 과제 정보 자동 포함</p>
               </div>
             </label>
