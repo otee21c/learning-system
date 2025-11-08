@@ -23,25 +23,20 @@ export default function OMRBatchGrading({ exams, students }) {
   // 수동 성적 기록용 state
   const [manualScore, setManualScore] = useState({
     studentId: '',
-    examId: '',
+    examType: '', // 시험 유형
+    maxScore: 100, // 기본 만점
     score: ''
   });
 
   // 수동 성적 기록 저장
   const handleManualScoreSave = async () => {
-    if (!manualScore.studentId || !manualScore.examId || !manualScore.score) {
+    if (!manualScore.studentId || !manualScore.examType || !manualScore.score) {
       alert('모든 항목을 입력해주세요.');
       return;
     }
 
-    const exam = exams.find(e => e.id === manualScore.examId);
-    if (!exam) {
-      alert('시험을 찾을 수 없습니다.');
-      return;
-    }
-
     const score = parseInt(manualScore.score);
-    const maxScore = exam.scores.reduce((a, b) => a + b, 0);
+    const maxScore = parseInt(manualScore.maxScore);
 
     if (score < 0 || score > maxScore) {
       alert(`점수는 0점에서 ${maxScore}점 사이여야 합니다.`);
@@ -56,10 +51,11 @@ export default function OMRBatchGrading({ exams, students }) {
       if (studentDoc) {
         const studentData = studentDoc.data();
         
-        // 간단한 결과 객체 생성 (수동 입력이므로 상세 분석 없음)
+        // 시험 유형 기반 결과 객체 생성
         const result = {
-          examId: exam.id,
-          examTitle: exam.title,
+          examId: `manual-${Date.now()}`, // 고유 ID 생성
+          examTitle: manualScore.examType,
+          examType: manualScore.examType, // 시험 유형 저장
           date: new Date().toISOString().split('T')[0],
           totalScore: score,
           maxScore: maxScore,
@@ -68,7 +64,9 @@ export default function OMRBatchGrading({ exams, students }) {
           typeStats: {},
           weakTypes: [],
           feedback: '수동으로 입력된 성적입니다.',
-          manualEntry: true // 수동 입력 표시
+          manualEntry: true, // 수동 입력 표시
+          month: selectedMonth, // 월 정보 저장
+          week: selectedWeek // 주차 정보 저장
         };
         
         const updatedExams = [...(studentData.exams || []), result];
@@ -77,7 +75,7 @@ export default function OMRBatchGrading({ exams, students }) {
           exams: updatedExams
         });
         
-        setManualScore({ studentId: '', examId: '', score: '' });
+        setManualScore({ studentId: '', examType: '', maxScore: 100, score: '' });
         alert('성적이 기록되었습니다!');
       } else {
         alert('학생을 찾을 수 없습니다.');
@@ -377,22 +375,21 @@ export default function OMRBatchGrading({ exams, students }) {
             </select>
           </div>
 
-          {/* 시험 선택 */}
+          {/* 시험 유형 선택 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               시험 선택 *
             </label>
             <select
-              value={manualScore.examId}
-              onChange={(e) => setManualScore({ ...manualScore, examId: e.target.value })}
+              value={manualScore.examType}
+              onChange={(e) => setManualScore({ ...manualScore, examType: e.target.value })}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             >
               <option value="">시험을 선택하세요</option>
-              {filteredExams.map(exam => (
-                <option key={exam.id} value={exam.id}>
-                  {exam.title} ({exam.date}) [{exam.month}월 {exam.week}주차]
-                </option>
-              ))}
+              <option value="복습 test">복습 test</option>
+              <option value="진단 test">진단 test</option>
+              <option value="점검 test">점검 test</option>
+              <option value="모의고사">모의고사</option>
             </select>
           </div>
 
@@ -400,9 +397,9 @@ export default function OMRBatchGrading({ exams, students }) {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               점수 입력 *
-              {manualScore.examId && (
+              {manualScore.examType && (
                 <span className="text-xs text-gray-500 ml-1">
-                  (최대 {exams.find(e => e.id === manualScore.examId)?.scores.reduce((a, b) => a + b, 0) || 0}점)
+                  (최대 {manualScore.maxScore}점)
                 </span>
               )}
             </label>
@@ -413,14 +410,14 @@ export default function OMRBatchGrading({ exams, students }) {
               placeholder="점수를 입력하세요"
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               min="0"
-              max={manualScore.examId ? exams.find(e => e.id === manualScore.examId)?.scores.reduce((a, b) => a + b, 0) : 100}
+              max={manualScore.maxScore}
             />
           </div>
         </div>
 
         <button
           onClick={handleManualScoreSave}
-          disabled={!manualScore.studentId || !manualScore.examId || !manualScore.score}
+          disabled={!manualScore.studentId || !manualScore.examType || !manualScore.score}
           className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg hover:shadow-lg transition-all font-semibold disabled:from-gray-300 disabled:to-gray-400 flex items-center justify-center gap-2"
         >
           <Save size={20} />
