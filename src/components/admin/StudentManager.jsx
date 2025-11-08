@@ -28,10 +28,14 @@ export default function StudentManager({ students }) {
     try {
       const email = `${newStudent.id}@student.com`;
       
-      // Firebase Auth에 학생 계정 생성
+      // 1. Firebase Auth에 학생 계정 생성
       await createUserWithEmailAndPassword(auth, email, newStudent.password);
       
-      // Firestore에 학생 정보 저장
+      // 2. 즉시 관리자 재로그인 (Firestore 저장 전에 권한 확보!)
+      await signOut(auth);
+      await signInWithEmailAndPassword(auth, 'admin@test.com', 'admin123');
+      
+      // 3. Firestore에 학생 정보 저장 (관리자 권한으로)
       await addDoc(collection(db, 'students'), {
         name: newStudent.name,
         grade: newStudent.grade,
@@ -42,10 +46,6 @@ export default function StudentManager({ students }) {
         password: newStudent.password,
         exams: []
       });
-      
-      // 관리자 재로그인 (학생 생성 후 자동 로그인되는 문제 해결)
-      await signOut(auth);
-      await signInWithEmailAndPassword(auth, 'admin@test.com', 'admin123'); // 관리자 비밀번호
       
       setNewStudent({ 
         name: '', 
