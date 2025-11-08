@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function StudentManager({ students }) {
   const [newStudent, setNewStudent] = useState({ 
@@ -42,6 +42,10 @@ export default function StudentManager({ students }) {
         password: newStudent.password,
         exams: []
       });
+      
+      // 관리자 재로그인 (학생 생성 후 자동 로그인되는 문제 해결)
+      await signOut(auth);
+      await signInWithEmailAndPassword(auth, 'admin@test.com', 'admin123'); // 관리자 비밀번호
       
       setNewStudent({ 
         name: '', 
