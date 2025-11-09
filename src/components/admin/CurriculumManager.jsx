@@ -47,7 +47,7 @@ const CurriculumManager = ({ students = [] }) => {
       return;
     }
 
-    if (formData.selectedStudents.length === 0) {
+    if (!formData.selectedStudents || formData.selectedStudents.length === 0) {
       alert('최소 1명 이상의 학생을 선택해주세요.');
       return;
     }
@@ -146,7 +146,8 @@ const CurriculumManager = ({ students = [] }) => {
               topics: '',
               startDate: '',
               endDate: '',
-              materials: ''
+              materials: '',
+              selectedStudents: [] // 중요! 이게 없으면 undefined 에러!
             });
           }}
           style={{
@@ -323,36 +324,37 @@ const CurriculumManager = ({ students = [] }) => {
                         alignItems: 'center', 
                         gap: '8px',
                         padding: '8px 12px',
-                        backgroundColor: formData.selectedStudents.includes(student.id) ? '#e0f2fe' : 'white',
+                        backgroundColor: (formData.selectedStudents || []).includes(student.id) ? '#e0f2fe' : 'white',
                         border: '1px solid #d1d5db',
                         borderRadius: '6px',
                         cursor: 'pointer',
                         transition: 'all 0.2s'
                       }}
                       onMouseEnter={(e) => {
-                        if (!formData.selectedStudents.includes(student.id)) {
+                        if (!(formData.selectedStudents || []).includes(student.id)) {
                           e.currentTarget.style.backgroundColor = '#f3f4f6';
                         }
                       }}
                       onMouseLeave={(e) => {
-                        if (!formData.selectedStudents.includes(student.id)) {
+                        if (!(formData.selectedStudents || []).includes(student.id)) {
                           e.currentTarget.style.backgroundColor = 'white';
                         }
                       }}
                     >
                       <input
                         type="checkbox"
-                        checked={formData.selectedStudents.includes(student.id)}
+                        checked={(formData.selectedStudents || []).includes(student.id)}
                         onChange={(e) => {
+                          const currentSelected = formData.selectedStudents || [];
                           if (e.target.checked) {
                             setFormData({
                               ...formData,
-                              selectedStudents: [...formData.selectedStudents, student.id]
+                              selectedStudents: [...currentSelected, student.id]
                             });
                           } else {
                             setFormData({
                               ...formData,
-                              selectedStudents: formData.selectedStudents.filter(id => id !== student.id)
+                              selectedStudents: currentSelected.filter(id => id !== student.id)
                             });
                           }
                         }}
@@ -370,7 +372,7 @@ const CurriculumManager = ({ students = [] }) => {
                 )}
               </div>
               <div style={{ marginTop: '10px', fontSize: '13px', color: '#666' }}>
-                선택된 학생: {formData.selectedStudents.length}명
+                선택된 학생: {(formData.selectedStudents || []).length}명
               </div>
             </div>
 
