@@ -24,6 +24,9 @@ export default function NotificationManager() {
   
   // 문자 발송 대상 선택 (학생/학부모/둘다)
   const [smsTarget, setSmsTarget] = useState('both'); // 'student', 'parent', 'both'
+  
+  // 발신번호 선택
+  const [senderType, setSenderType] = useState('personal'); // 'personal', 'sub', 'main'
    
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -229,7 +232,16 @@ export default function NotificationManager() {
       // 환경변수에서 Aligo API 정보 가져오기
       const apiKey = import.meta.env.VITE_ALIGO_API_KEY;
       const userId = import.meta.env.VITE_ALIGO_USER_ID;
-      const sender = import.meta.env.VITE_ALIGO_SENDER;
+      
+      // 선택된 발신번호 타입에 따라 번호 결정
+      let sender;
+      if (senderType === 'main') {
+        sender = import.meta.env.VITE_ALIGO_SENDER_MAIN || '025695559'; // 대표번호
+      } else if (senderType === 'sub') {
+        sender = import.meta.env.VITE_ALIGO_SENDER_SUB || '01084661129'; // 추가번호
+      } else {
+        sender = import.meta.env.VITE_ALIGO_SENDER || '01054535388'; // 개인번호 (기본값)
+      }
 
       if (!apiKey || !userId || !sender) {
         console.error('❌ Aligo API 설정이 없습니다. .env 파일을 확인하세요.');
@@ -578,6 +590,70 @@ export default function NotificationManager() {
                   : 'border-gray-200 bg-white hover:border-indigo-300'
               }`}>
                 <p className="font-semibold text-gray-700">학생 + 학부모</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* 1-1-1. 발신번호 선택 */}
+        <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl">
+          <h3 className="font-bold text-lg mb-4 text-gray-800">1-1-1. 발신번호 선택</h3>
+          
+          <div className="flex gap-3">
+            <label className="flex-1 cursor-pointer">
+              <input
+                type="radio"
+                name="senderType"
+                value="personal"
+                checked={senderType === 'personal'}
+                onChange={(e) => setSenderType(e.target.value)}
+                className="hidden"
+              />
+              <div className={`p-4 rounded-lg border-2 text-center transition ${
+                senderType === 'personal'
+                  ? 'border-purple-600 bg-purple-50'
+                  : 'border-gray-200 bg-white hover:border-purple-300'
+              }`}>
+                <p className="font-semibold text-gray-700">개인번호</p>
+                <p className="text-sm text-gray-500 mt-1">010-5453-5388</p>
+              </div>
+            </label>
+
+            <label className="flex-1 cursor-pointer">
+              <input
+                type="radio"
+                name="senderType"
+                value="sub"
+                checked={senderType === 'sub'}
+                onChange={(e) => setSenderType(e.target.value)}
+                className="hidden"
+              />
+              <div className={`p-4 rounded-lg border-2 text-center transition ${
+                senderType === 'sub'
+                  ? 'border-purple-600 bg-purple-50'
+                  : 'border-gray-200 bg-white hover:border-purple-300'
+              }`}>
+                <p className="font-semibold text-gray-700">추가번호</p>
+                <p className="text-sm text-gray-500 mt-1">010-8466-1129</p>
+              </div>
+            </label>
+
+            <label className="flex-1 cursor-pointer">
+              <input
+                type="radio"
+                name="senderType"
+                value="main"
+                checked={senderType === 'main'}
+                onChange={(e) => setSenderType(e.target.value)}
+                className="hidden"
+              />
+              <div className={`p-4 rounded-lg border-2 text-center transition ${
+                senderType === 'main'
+                  ? 'border-purple-600 bg-purple-50'
+                  : 'border-gray-200 bg-white hover:border-purple-300'
+              }`}>
+                <p className="font-semibold text-gray-700">대표번호</p>
+                <p className="text-sm text-gray-500 mt-1">02-569-5559</p>
               </div>
             </label>
           </div>
