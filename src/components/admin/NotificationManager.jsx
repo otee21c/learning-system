@@ -653,7 +653,7 @@ export default function NotificationManager() {
                   : 'border-gray-200 bg-white hover:border-purple-300'
               }`}>
                 <p className="font-semibold text-gray-700">대표번호</p>
-                <p className="text-sm text-gray-500 mt-1">02-569-5559</p>
+                <p className="text-sm text-gray-500 mt-1">02-562-5559</p>
               </div>
             </label>
           </div>
