@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { FileText, Download, Image, Calendar, User, ChevronDown, ChevronUp, Save, Trash2 } from 'lucide-react';
+import { FileText, Download, Image, Calendar, User, ChevronDown, ChevronUp, Save, Trash2, Send } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
@@ -43,6 +43,11 @@ const ReportGenerator = ({ students = [] }) => {
 
   // 이미지 생성 중
   const [generating, setGenerating] = useState(false);
+
+  // MMS 발송 관련
+  const [sendingMMS, setSendingMMS] = useState(false);
+  const [mmsTarget, setMmsTarget] = useState('both'); // 'student' | 'parent' | 'both'
+  const [mmsSenderType, setMmsSenderType] = useState('personal');
 
   // 데이터 로드
   useEffect(() => {
@@ -311,6 +316,149 @@ const ReportGenerator = ({ students = [] }) => {
     }
   };
 
+  // MMS 발송 함수
+  const sendMMS = async (phoneNumber, imageBase64, textMessage) => {
+    try {
+      const apiKey = import.meta.env.VITE_ALIGO_API_KEY;
+      const userId = import.meta.env.VITE_ALIGO_USER_ID;
+      
+      let sender;
+      if (mmsSenderType === 'main') {
+        sender = import.meta.env.VITE_ALIGO_SENDER_MAIN || '025695559';
+      } else if (mmsSenderType === 'sub') {
+        sender = import.meta.env.VITE_ALIGO_SENDER_SUB || '01084661129';
+      } else {
+        sender = import.meta.env.VITE_ALIGO_SENDER || '01054535388';
+      }
+
+      if (!apiKey || !userId || !sender) {
+        console.error('❌ Aligo API 설정이 없습니다.');
+        return false;
+      }
+
+      const cleanPhone = phoneNumber.replace(/-/g, '');
+
+      // FormData로 MMS 전송
+      const formData = new FormData();
+      formData.append('key', apiKey);
+      formData.append('user_id', userId);
+      formData.append('sender', sender);
+      formData.append('receiver', cleanPhone);
+      formData.append('msg', textMessage);
+      formData.append('msg_type', 'MMS');
+      formData.append('testmode_yn', 'N');
+      
+      // Base64 이미지를 Blob으로 변환
+      const base64Data = imageBase64.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/png' });
+      
+      // 이미지 파일 추가
+      formData.append('image', blob, 'report.png');
+
+      const response = await fetch('https://apis.aligo.in/send/', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (result.result_code === '1') {
+        console.log('✅ MMS 발송 성공:', cleanPhone);
+        return true;
+      } else {
+        console.error('❌ MMS 발송 실패:', result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('MMS 발송 중 오류:', error);
+      return false;
+    }
+  };
+
+  // MMS로 리포트 발송
+  const handleSendMMS = async () => {
+    if (!reportRef.current || !selectedStudent) {
+      alert('리포트를 먼저 생성해주세요.');
+      return;
+    }
+
+    // 전화번호 확인
+    const phoneNumbers = [];
+    if (mmsTarget === 'student' || mmsTarget === 'both') {
+      if (selectedStudent.phone) {
+        phoneNumbers.push({ type: '학생', number: selectedStudent.phone });
+      }
+    }
+    if (mmsTarget === 'parent' || mmsTarget === 'both') {
+      if (selectedStudent.parentPhone) {
+        phoneNumbers.push({ type: '학부모', number: selectedStudent.parentPhone });
+      }
+    }
+
+    if (phoneNumbers.length === 0) {
+      alert('발송할 전화번호가 없습니다.\n학생 정보에서 전화번호를 확인해주세요.');
+      return;
+    }
+
+    const confirmSend = window.confirm(
+      `${selectedStudent.name} 학생의 리포트를 발송합니다.\n\n` +
+      `발송 대상:\n${phoneNumbers.map(p => `- ${p.type}: ${p.number}`).join('\n')}\n\n` +
+      `계속하시겠습니까?`
+    );
+
+    if (!confirmSend) return;
+
+    setSendingMMS(true);
+
+    try {
+      // 이미지 생성
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false
+      });
+
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8); // JPEG로 압축 (용량 줄이기)
+      
+      // 텍스트 메시지
+      const textMessage = `[오늘의 국어 연구소]\n${selectedStudent.name} 학생 ${getPeriodText()} 진단 리포트입니다.`;
+
+      // 각 번호로 발송
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const phone of phoneNumbers) {
+        const success = await sendMMS(phone.number, imageBase64, textMessage);
+        if (success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+        // 발송 간격
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (successCount > 0) {
+        alert(`MMS 발송 완료!\n성공: ${successCount}건\n실패: ${failCount}건`);
+      } else {
+        alert('MMS 발송에 실패했습니다.\nAligo API 설정을 확인해주세요.');
+      }
+
+    } catch (error) {
+      console.error('MMS 발송 실패:', error);
+      alert('MMS 발송에 실패했습니다.');
+    } finally {
+      setSendingMMS(false);
+    }
+  };
+
   // 기간 텍스트
   const getPeriodText = () => {
     if (periodMode === 'monthly') {
@@ -515,6 +663,85 @@ const ReportGenerator = ({ students = [] }) => {
               </div>
             </div>
 
+            {/* MMS 발송 옵션 */}
+            <div className="mb-4 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                📱 MMS로 리포트 발송
+              </h4>
+              
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* 발송 대상 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">발송 대상</label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'student', label: '학생' },
+                      { value: 'parent', label: '학부모' },
+                      { value: 'both', label: '둘 다' }
+                    ].map(option => (
+                      <label key={option.value} className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="mmsTarget"
+                          value={option.value}
+                          checked={mmsTarget === option.value}
+                          onChange={(e) => setMmsTarget(e.target.value)}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 발신번호 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">발신번호</label>
+                  <select
+                    value={mmsSenderType}
+                    onChange={(e) => setMmsSenderType(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="personal">개인번호 (010-5453-5388)</option>
+                    <option value="sub">추가번호 (010-8466-1129)</option>
+                    <option value="main">대표번호 (02-562-5559)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 발송 정보 표시 */}
+              <div className="mb-3 p-3 bg-white rounded-lg text-sm">
+                <p className="text-gray-600">
+                  📞 발송 대상 번호:
+                </p>
+                <div className="mt-1 space-y-1">
+                  {(mmsTarget === 'student' || mmsTarget === 'both') && (
+                    <p className={selectedStudent?.phone ? 'text-green-600' : 'text-red-500'}>
+                      • 학생: {selectedStudent?.phone || '번호 없음'}
+                    </p>
+                  )}
+                  {(mmsTarget === 'parent' || mmsTarget === 'both') && (
+                    <p className={selectedStudent?.parentPhone ? 'text-green-600' : 'text-red-500'}>
+                      • 학부모: {selectedStudent?.parentPhone || '번호 없음'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={handleSendMMS}
+                disabled={sendingMMS}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg hover:shadow-lg transition disabled:from-gray-400 disabled:to-gray-500 font-semibold"
+              >
+                <Send size={18} />
+                {sendingMMS ? 'MMS 발송 중...' : 'MMS로 리포트 발송'}
+              </button>
+              
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                💡 MMS는 건당 약 50~100원의 비용이 발생합니다.
+              </p>
+            </div>
+
             {/* 실제 리포트 (이미지로 변환될 영역) */}
             <div 
               ref={reportRef}
@@ -554,31 +781,34 @@ const ReportGenerator = ({ students = [] }) => {
                     📚 주차별 수업 내용
                   </h2>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
+                    <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border border-gray-300 px-3 py-2 text-left text-sm font-semibold" style={{ width: '80px' }}>주차</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left text-sm font-semibold" style={{ width: '180px' }}>커리큘럼</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left text-sm font-semibold" style={{ width: '120px' }}>성취도</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left text-sm font-semibold">수업 메모</th>
+                          <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold" style={{ width: '60px' }}>주차</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left text-sm font-semibold" style={{ width: '200px' }}>커리큘럼</th>
+                          <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold" style={{ width: '100px' }}>성취도</th>
+                          <th className="border border-gray-300 px-2 py-2 text-left text-sm font-semibold">수업 메모</th>
                         </tr>
                       </thead>
                       <tbody>
                         {reportData.weeklyData.map((week, idx) => (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="border border-gray-300 px-3 py-2 text-sm font-medium">
-                              {week.month}월 {week.week}주차
+                            <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">
+                              <div>{week.month}월</div>
+                              <div>{week.week}주차</div>
                             </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm">
-                              {week.curriculum}
+                            <td className="border border-gray-300 px-2 py-2 text-sm">
+                              <div style={{ wordBreak: 'keep-all', lineHeight: '1.4' }}>
+                                {week.curriculum}
+                              </div>
                             </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm">
+                            <td className="border border-gray-300 px-2 py-2 text-sm text-center">
                               {week.exams && week.exams.length > 0 ? (
                                 <div className="space-y-1">
                                   {week.exams.map((exam, i) => (
-                                    <div key={i} className="text-xs">
-                                      <span className="font-medium">{exam.totalScore}점</span>
-                                      <span className="text-gray-500 ml-1">({exam.examTitle})</span>
+                                    <div key={i}>
+                                      <div className="font-semibold text-indigo-600">{exam.totalScore}점</div>
+                                      <div className="text-xs text-gray-500">({exam.examTitle})</div>
                                     </div>
                                   ))}
                                 </div>
@@ -586,8 +816,8 @@ const ReportGenerator = ({ students = [] }) => {
                                 <span className="text-gray-400">-</span>
                               )}
                             </td>
-                            <td className="border border-gray-300 px-3 py-2 text-sm">
-                              <div style={{ maxWidth: '250px', wordBreak: 'break-word' }}>
+                            <td className="border border-gray-300 px-2 py-2 text-sm">
+                              <div style={{ lineHeight: '1.5' }}>
                                 {week.memo}
                               </div>
                             </td>
