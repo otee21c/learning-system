@@ -14,12 +14,10 @@ import VideoManager from './components/admin/VideoManager';
 import OMRBatchGrading from './components/admin/OMRBatchGrading';
 import StatisticsView from './components/admin/StatisticsView';
 import HomeworkManager from './components/admin/HomeworkManager';
-import ProblemAssignmentManager from './components/admin/ProblemAssignmentManager';
 import ProblemAnalysisManager from './components/admin/ProblemAnalysisManager';
 import NotificationManager from './components/admin/NotificationManager';
 import CurriculumManager from './components/admin/CurriculumManager';
 import AttendanceManager from './components/admin/AttendanceManager';
-import ProblemGenerator from './components/admin/ProblemGenerator';
 import ProblemSolver from './components/admin/ProblemSolver';
 
 // Student Components
@@ -190,12 +188,10 @@ export default function App() {
               {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} />}
               {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} />}
               {activeTab === 'homework' && <HomeworkManager students={students} />}
-              {activeTab === 'problem-assignment' && <ProblemAssignmentManager students={students} />}
               {activeTab === 'problem-analysis' && <ProblemAnalysisManager problemAnalysisList={problemAnalysisList} />}
               {activeTab === 'notification' && <NotificationManager students={students} />}
               {activeTab === 'curriculum' && <CurriculumManager students={students} />}
               {activeTab === 'attendance' && <AttendanceManager students={students} />}
-              {activeTab === 'problem-generator' && <ProblemGenerator />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
             </>
           )}
