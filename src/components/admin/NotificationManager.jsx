@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { Bell, Send, Eye, Clock, CheckCircle, Users, Calendar, Zap, List, Settings, Trash2, Edit, FileText } from 'lucide-react';
+import { Bell, Send, Eye, Clock, CheckCircle, Users, Calendar, Zap, List, Settings, Trash2, Edit, FileText, X } from 'lucide-react';
 import { getMonthWeek, getTodayMonthWeek, formatMonthWeek } from '../../utils/dateUtils';
 
 export default function NotificationManager() {
@@ -23,7 +23,7 @@ export default function NotificationManager() {
   const [includeExam, setIncludeExam] = useState(false);
   const [includeHomework, setIncludeHomework] = useState(false);
   const [includeCurriculum, setIncludeCurriculum] = useState(false);
-  const [includeMemo, setIncludeMemo] = useState(false); // 수업 메모 포함
+  const [includeMemo, setIncludeMemo] = useState(false);
   
   // 문자 발송 대상 선택 (학생/학부모/둘다)
   const [smsTarget, setSmsTarget] = useState('both');
@@ -36,7 +36,7 @@ export default function NotificationManager() {
   const [previewMessage, setPreviewMessage] = useState('');
   const [curriculumList, setCurriculumList] = useState([]);
   const [attendanceList, setAttendanceList] = useState([]);
-  const [studentMemos, setStudentMemos] = useState({}); // 수업 메모 데이터
+  const [studentMemos, setStudentMemos] = useState({});
 
   // === 일괄 발송 관련 상태 ===
   const [batchPrepared, setBatchPrepared] = useState(false);
@@ -44,6 +44,9 @@ export default function NotificationManager() {
   const [batchSending, setBatchSending] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [expandedStudentId, setExpandedStudentId] = useState(null);
+  
+  // === 일괄 발송 학생 제외 ===
+  const [excludedStudents, setExcludedStudents] = useState([]);
 
   // === 예약 설정 관련 상태 ===
   const [schedules, setSchedules] = useState([]);
@@ -53,8 +56,9 @@ export default function NotificationManager() {
     name: '',
     dayOfWeek: 5, // 금요일
     targetGrade: 'all',
+    excludedStudents: [], // 제외할 학생 ID 배열
     includeAttendance: true,
-    includeExam: false,
+    includeExam: true, // ⭐ 기본값 true로 변경
     includeHomework: true,
     includeCurriculum: true,
     includeMemo: true,
@@ -157,6 +161,11 @@ export default function NotificationManager() {
     ? students 
     : students.filter(s => s.grade === selectedGrade);
 
+  // 예약 설정 폼에서 학년별 필터링된 학생 목록
+  const scheduleFilteredStudents = scheduleForm.targetGrade === 'all'
+    ? students
+    : students.filter(s => s.grade === scheduleForm.targetGrade);
+
   // 미리보기 업데이트
   useEffect(() => {
     if (selectedStudents.length === 0) {
@@ -210,7 +219,6 @@ export default function NotificationManager() {
       });
 
       if (selectedWeekAttendance.length > 0) {
-        // 출석 또는 지각인 경우 출석으로 계산
         const presentCount = selectedWeekAttendance.filter(a => 
           a.status === '출석' || a.status === '지각'
         ).length;
@@ -451,10 +459,13 @@ export default function NotificationManager() {
       return;
     }
 
-    // 학년 필터링
-    const targetStudents = selectedGrade === 'all' 
+    // 학년 필터링 후 제외 학생 제외
+    let targetStudents = selectedGrade === 'all' 
       ? students 
       : students.filter(s => s.grade === selectedGrade);
+    
+    // 제외된 학생 필터링
+    targetStudents = targetStudents.filter(s => !excludedStudents.includes(s.id));
 
     if (targetStudents.length === 0) {
       alert('발송 대상 학생이 없습니다.');
@@ -480,7 +491,7 @@ export default function NotificationManager() {
         grade: student.grade,
         content,
         phoneNumbers,
-        status: 'pending' // pending, sent, failed
+        status: 'pending'
       };
     });
 
@@ -570,6 +581,31 @@ export default function NotificationManager() {
     setBatchProgress({ current: 0, total: 0 });
   };
 
+  // === 학생 제외 토글 ===
+  const toggleExcludeStudent = (studentId) => {
+    if (excludedStudents.includes(studentId)) {
+      setExcludedStudents(excludedStudents.filter(id => id !== studentId));
+    } else {
+      setExcludedStudents([...excludedStudents, studentId]);
+    }
+  };
+
+  // === 예약 설정에서 학생 제외 토글 ===
+  const toggleScheduleExcludeStudent = (studentId) => {
+    const currentExcluded = scheduleForm.excludedStudents || [];
+    if (currentExcluded.includes(studentId)) {
+      setScheduleForm({
+        ...scheduleForm,
+        excludedStudents: currentExcluded.filter(id => id !== studentId)
+      });
+    } else {
+      setScheduleForm({
+        ...scheduleForm,
+        excludedStudents: [...currentExcluded, studentId]
+      });
+    }
+  };
+
   // === 예약 설정 저장 ===
   const handleSaveSchedule = async () => {
     if (!scheduleForm.name.trim()) {
@@ -608,8 +644,9 @@ export default function NotificationManager() {
         name: '',
         dayOfWeek: 5,
         targetGrade: 'all',
+        excludedStudents: [],
         includeAttendance: true,
-        includeExam: false,
+        includeExam: true,
         includeHomework: true,
         includeCurriculum: true,
         includeMemo: true,
@@ -628,6 +665,7 @@ export default function NotificationManager() {
   // === 예약 설정 불러오기 (일괄 발송에 적용) ===
   const handleApplySchedule = (schedule) => {
     setSelectedGrade(schedule.targetGrade || 'all');
+    setExcludedStudents(schedule.excludedStudents || []);
     setIncludeAttendance(schedule.includeAttendance || false);
     setIncludeExam(schedule.includeExam || false);
     setIncludeHomework(schedule.includeHomework || false);
@@ -663,6 +701,7 @@ export default function NotificationManager() {
       name: schedule.name || '',
       dayOfWeek: schedule.dayOfWeek || 5,
       targetGrade: schedule.targetGrade || 'all',
+      excludedStudents: schedule.excludedStudents || [],
       includeAttendance: schedule.includeAttendance || false,
       includeExam: schedule.includeExam || false,
       includeHomework: schedule.includeHomework || false,
@@ -1110,9 +1149,12 @@ export default function NotificationManager() {
                     1. 발송 대상 선택
                   </h3>
                   
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 mb-4">
                     <button
-                      onClick={() => setSelectedGrade('all')}
+                      onClick={() => {
+                        setSelectedGrade('all');
+                        setExcludedStudents([]);
+                      }}
                       className={`px-4 py-2 rounded-lg font-medium transition ${
                         selectedGrade === 'all'
                           ? 'bg-indigo-600 text-white'
@@ -1126,7 +1168,10 @@ export default function NotificationManager() {
                       return (
                         <button
                           key={grade}
-                          onClick={() => setSelectedGrade(grade)}
+                          onClick={() => {
+                            setSelectedGrade(grade);
+                            setExcludedStudents([]);
+                          }}
                           className={`px-4 py-2 rounded-lg font-medium transition ${
                             selectedGrade === grade
                               ? 'bg-indigo-600 text-white'
@@ -1139,12 +1184,45 @@ export default function NotificationManager() {
                     })}
                   </div>
 
-                  <div className="mt-4 p-3 bg-white rounded-lg">
-                    <p className="text-sm text-gray-600">
-                      선택된 대상: <span className="font-semibold text-indigo-600">
+                  {/* 학생 제외 선택 */}
+                  <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-3">
+                      🚫 제외할 학생 선택 (클릭하면 제외)
+                    </p>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                      {filteredStudents.map(student => (
+                        <button
+                          key={student.id}
+                          onClick={() => toggleExcludeStudent(student.id)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                            excludedStudents.includes(student.id)
+                              ? 'bg-red-100 text-red-700 line-through'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {student.name}
+                          {excludedStudents.includes(student.id) && (
+                            <X size={14} className="inline ml-1" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    {excludedStudents.length > 0 && (
+                      <p className="text-xs text-red-600 mt-2">
+                        {excludedStudents.length}명 제외됨
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
+                    <p className="text-sm text-indigo-800">
+                      선택된 대상: <span className="font-semibold">
                         {selectedGrade === 'all' ? '전체' : selectedGrade} 
-                        ({filteredStudents.length}명)
+                        ({filteredStudents.length - excludedStudents.length}명)
                       </span>
+                      {excludedStudents.length > 0 && (
+                        <span className="text-red-600"> (제외 {excludedStudents.length}명)</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -1358,7 +1436,7 @@ export default function NotificationManager() {
                   className="w-full bg-gradient-to-r from-green-600 to-teal-600 text-white py-4 rounded-xl hover:shadow-lg transition-all font-semibold text-lg flex items-center justify-center gap-2"
                 >
                   <Zap size={20} />
-                  발송 준비하기 ({filteredStudents.length}명)
+                  발송 준비하기 ({filteredStudents.length - excludedStudents.length}명)
                 </button>
               </>
             ) : (
@@ -1489,8 +1567,9 @@ export default function NotificationManager() {
                       name: '',
                       dayOfWeek: 5,
                       targetGrade: 'all',
+                      excludedStudents: [],
                       includeAttendance: true,
-                      includeExam: false,
+                      includeExam: true,
                       includeHomework: true,
                       includeCurriculum: true,
                       includeMemo: true,
@@ -1546,7 +1625,11 @@ export default function NotificationManager() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">대상 학년</label>
                         <select
                           value={scheduleForm.targetGrade}
-                          onChange={(e) => setScheduleForm({...scheduleForm, targetGrade: e.target.value})}
+                          onChange={(e) => setScheduleForm({
+                            ...scheduleForm, 
+                            targetGrade: e.target.value,
+                            excludedStudents: [] // 학년 변경 시 제외 학생 초기화
+                          })}
                           className="w-full p-3 border border-gray-300 rounded-lg"
                         >
                           <option value="all">전체</option>
@@ -1555,6 +1638,39 @@ export default function NotificationManager() {
                           ))}
                         </select>
                       </div>
+                    </div>
+
+                    {/* 학생 제외 선택 */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        🚫 제외할 학생 선택 (클릭하면 제외)
+                      </label>
+                      <div className="p-3 bg-white border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
+                        <div className="flex flex-wrap gap-2">
+                          {scheduleFilteredStudents.map(student => (
+                            <button
+                              key={student.id}
+                              type="button"
+                              onClick={() => toggleScheduleExcludeStudent(student.id)}
+                              className={`px-3 py-1 rounded-full text-sm font-medium transition ${
+                                (scheduleForm.excludedStudents || []).includes(student.id)
+                                  ? 'bg-red-100 text-red-700 line-through'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {student.name}
+                              {(scheduleForm.excludedStudents || []).includes(student.id) && (
+                                <X size={12} className="inline ml-1" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {(scheduleForm.excludedStudents || []).length > 0 && (
+                        <p className="text-xs text-red-600 mt-1">
+                          {scheduleForm.excludedStudents.length}명 제외됨
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -1652,7 +1768,13 @@ export default function NotificationManager() {
                             </span>
                           </div>
                           <div className="text-sm text-gray-600 space-y-1">
-                            <p>📅 {dayNames[schedule.dayOfWeek || 5]} | 👥 {schedule.targetGrade === 'all' ? '전체' : schedule.targetGrade}</p>
+                            <p>
+                              📅 {dayNames[schedule.dayOfWeek || 5]} | 
+                              👥 {schedule.targetGrade === 'all' ? '전체' : schedule.targetGrade}
+                              {schedule.excludedStudents && schedule.excludedStudents.length > 0 && (
+                                <span className="text-red-600"> (제외 {schedule.excludedStudents.length}명)</span>
+                              )}
+                            </p>
                             <p>
                               포함: 
                               {schedule.includeCurriculum && ' 커리큘럼'}
