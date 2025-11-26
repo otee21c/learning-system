@@ -19,6 +19,7 @@ import NotificationManager from './components/admin/NotificationManager';
 import CurriculumManager from './components/admin/CurriculumManager';
 import AttendanceManager from './components/admin/AttendanceManager';
 import ProblemSolver from './components/admin/ProblemSolver';
+import ReportGenerator from './components/admin/ReportGenerator';
 
 // Student Components
 import ExamTaking from './components/student/ExamTaking';
@@ -192,6 +193,7 @@ export default function App() {
               {activeTab === 'notification' && <NotificationManager students={students} />}
               {activeTab === 'curriculum' && <CurriculumManager students={students} />}
               {activeTab === 'attendance' && <AttendanceManager students={students} />}
+              {activeTab === 'report' && <ReportGenerator students={students} />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
             </>
           )}

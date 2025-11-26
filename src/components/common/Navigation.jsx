@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search } from 'lucide-react';
+import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search, ClipboardList } from 'lucide-react';
 
 export default function Navigation({ currentUser, activeTab, setActiveTab }) {
   // 관리자 탭 메뉴
@@ -14,6 +14,7 @@ export default function Navigation({ currentUser, activeTab, setActiveTab }) {
     { id: 'notification', label: '알림 발송', icon: Bell },
     { id: 'curriculum', label: '커리큘럼', icon: Calendar },
     { id: 'attendance', label: '출석 관리', icon: Users },
+    { id: 'report', label: '진단 리포트', icon: ClipboardList },
     { id: 'problem-solver', label: '오늘의 문제 풀이', icon: Brain },
   ];
 
