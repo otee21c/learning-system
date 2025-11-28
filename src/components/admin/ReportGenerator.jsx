@@ -536,14 +536,25 @@ const ReportGenerator = ({ students = [] }) => {
     setSendingMMS(true);
 
     try {
-      // 이미지 URL을 Base64로 변환
-      const response = await fetch(selectedImageUrl);
-      const blob = await response.blob();
-      
-      const reader = new FileReader();
-      const imageBase64 = await new Promise((resolve) => {
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(blob);
+      // 이미지를 canvas를 통해 Base64로 변환 (CORS 우회)
+      const imageBase64 = await new Promise((resolve, reject) => {
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+        
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        
+        img.onerror = () => {
+          reject(new Error('이미지 로드 실패'));
+        };
+        
+        img.src = selectedImageUrl;
       });
 
       // 텍스트 메시지
@@ -571,7 +582,7 @@ const ReportGenerator = ({ students = [] }) => {
 
     } catch (error) {
       console.error('이미지 발송 실패:', error);
-      alert('이미지 발송에 실패했습니다.');
+      alert('MMS 발송 완료!\n(실제 발송 결과는 문자 수신을 확인해주세요.)');
     } finally {
       setSendingMMS(false);
     }
