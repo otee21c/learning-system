@@ -536,26 +536,24 @@ const ReportGenerator = ({ students = [] }) => {
     setSendingMMS(true);
 
     try {
-      // 이미지를 canvas를 통해 Base64로 변환 (CORS 우회)
-      const imageBase64 = await new Promise((resolve, reject) => {
-        const img = new window.Image();
-        img.crossOrigin = 'anonymous';
-        
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
-        };
-        
-        img.onerror = () => {
-          reject(new Error('이미지 로드 실패'));
-        };
-        
-        img.src = selectedImageUrl;
+      // 미리보기 이미지 요소를 html2canvas로 캡처 (월별 리포트와 동일한 방식)
+      const imageElement = document.getElementById('selected-image-preview');
+      
+      if (!imageElement) {
+        alert('이미지를 찾을 수 없습니다.');
+        setSendingMMS(false);
+        return;
+      }
+
+      const canvas = await html2canvas(imageElement, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        allowTaint: true,
+        logging: false
       });
+
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
       // 텍스트 메시지
       const textMessage = `[오늘의 국어 연구소]\n${selectedStudent.name} 학생\n${selectedImage?.title || '성적표'}입니다.`;
@@ -574,15 +572,11 @@ const ReportGenerator = ({ students = [] }) => {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      if (successCount > 0) {
-        alert(`MMS 발송 완료!\n성공: ${successCount}건\n실패: ${failCount}건`);
-      } else {
-        alert('MMS 발송에 실패했습니다.\nAligo API 설정을 확인해주세요.');
-      }
+      alert(`MMS 발송 완료!\n성공: ${successCount}건\n실패: ${failCount}건`);
 
     } catch (error) {
       console.error('이미지 발송 실패:', error);
-      alert('MMS 발송 완료!\n(실제 발송 결과는 문자 수신을 확인해주세요.)');
+      alert('MMS 발송에 실패했습니다.');
     } finally {
       setSendingMMS(false);
     }
@@ -1098,9 +1092,11 @@ const ReportGenerator = ({ students = [] }) => {
 
                 <div className="mb-4">
                   <img
+                    id="selected-image-preview"
                     src={selectedImageUrl}
                     alt="선택된 이미지"
                     className="max-h-64 mx-auto rounded-lg shadow-md"
+                    crossOrigin="anonymous"
                   />
                 </div>
 
