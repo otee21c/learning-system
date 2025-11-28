@@ -17,9 +17,14 @@ export default function StatisticsView({ students, exams }) {
   const filteredExamIds = filteredExams.map(exam => exam.id);
   
   // 학생 데이터를 필터링 (선택한 월/주차의 시험만 포함)
+  // - 시험 관리에서 등록된 시험 (examId 매칭)
+  // - 수동 입력 성적 (월/주차 매칭)
   const filteredStudents = students.map(student => ({
     ...student,
-    exams: student.exams?.filter(exam => filteredExamIds.includes(exam.examId)) || []
+    exams: student.exams?.filter(exam => 
+      filteredExamIds.includes(exam.examId) ||
+      (exam.manualEntry && exam.month === selectedMonth && exam.week === selectedWeek)
+    ) || []
   }));
   // 전체 평균 계산
   const calculateOverallStats = () => {

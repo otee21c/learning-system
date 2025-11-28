@@ -93,7 +93,7 @@ export default function NotificationManager() {
       }));
 
       // 제출 목록 로드
-      const submissionsRef = collection(db, 'submissions');
+      const submissionsRef = collection(db, 'homeworkSubmissions');
       const submissionsSnapshot = await getDocs(submissionsRef);
       const submissionsData = submissionsSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -103,7 +103,7 @@ export default function NotificationManager() {
       // 과제에 제출 정보 연결
       const homeworkWithSubmissions = homeworkData.map(hw => ({
         ...hw,
-        submissions: submissionsData.filter(sub => sub.assignmentId === hw.id)
+        submissions: submissionsData.filter(sub => sub.homeworkId === hw.id)
       }));
 
       setHomeworkList(homeworkWithSubmissions);

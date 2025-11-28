@@ -198,6 +198,12 @@ const ReportGenerator = ({ students = [] }) => {
       // 해당 주차 시험 성적 (학생 데이터에서)
       const studentExams = selectedStudent?.exams || [];
       const weekExams = studentExams.filter(exam => {
+        // 수동 입력 성적은 month/week 필드로 매칭
+        if (exam.manualEntry) {
+          return exam.month === month && exam.week === week;
+        }
+        
+        // 시험 관리에서 등록된 성적은 날짜로 계산
         if (!exam.date) return false;
         const examDate = new Date(exam.date);
         const examMonth = examDate.getMonth() + 1;

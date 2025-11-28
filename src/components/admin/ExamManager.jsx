@@ -12,14 +12,14 @@ export default function ExamManager({ exams, students }) {
     totalQuestions: 40,
     answers: Array(40).fill(''),
     scores: Array(40).fill(2),
-    types: Array(40).fill('사실적 이해')
+    types: Array(40).fill('정보 독해')
   });
 
   const [editingExam, setEditingExam] = useState(null);
 
   const questionTypes = [
-    '사실적 이해', '추론적 이해', '비판적 이해', 
-    '어휘/문법', '문학 감상', '작품 분석'
+    '정보 독해', '의미 독해', '보기 독해', 
+    '어휘 독해', '문법 독해', '화작 독해'
   ];
 
   // 문제 수 변경 시 배열 조정
@@ -30,7 +30,7 @@ export default function ExamManager({ exams, students }) {
       totalQuestions: num,
       answers: Array(num).fill(''),
       scores: Array(num).fill(2),
-      types: Array(num).fill('사실적 이해')
+      types: Array(num).fill('정보 독해')
     });
   };
 
@@ -69,7 +69,7 @@ export default function ExamManager({ exams, students }) {
         totalQuestions: 40,
         answers: Array(40).fill(''),
         scores: Array(40).fill(2),
-        types: Array(40).fill('사실적 이해')
+        types: Array(40).fill('정보 독해')
       });
       
       alert('시험이 추가되었습니다.');
