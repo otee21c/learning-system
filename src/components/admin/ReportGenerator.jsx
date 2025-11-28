@@ -37,6 +37,7 @@ const ReportGenerator = ({ students = [] }) => {
   // 저장된 이미지 관련 (이미지 발송 모드용)
   const [studentImages, setStudentImages] = useState({});
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [selectedImageBase64, setSelectedImageBase64] = useState(''); // Base64 변환된 이미지
 
   // 리포트 데이터
   const [reportData, setReportData] = useState(null);
@@ -497,7 +498,7 @@ const ReportGenerator = ({ students = [] }) => {
 
   // 저장된 이미지로 MMS 발송 (이미지 발송 모드용)
   const handleSendSavedImage = async () => {
-    if (!selectedStudent || !selectedImageUrl) {
+    if (!selectedStudent || !selectedImageBase64) {
       alert('학생과 이미지를 선택해주세요.');
       return;
     }
@@ -536,34 +537,15 @@ const ReportGenerator = ({ students = [] }) => {
     setSendingMMS(true);
 
     try {
-      // 미리보기 이미지 요소를 html2canvas로 캡처 (월별 리포트와 동일한 방식)
-      const imageElement = document.getElementById('selected-image-preview');
-      
-      if (!imageElement) {
-        alert('이미지를 찾을 수 없습니다.');
-        setSendingMMS(false);
-        return;
-      }
-
-      const canvas = await html2canvas(imageElement, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: true,
-        logging: false
-      });
-
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-
       // 텍스트 메시지
       const textMessage = `[오늘의 국어 연구소]\n${selectedStudent.name} 학생\n${selectedImage?.title || '성적표'}입니다.`;
 
-      // 각 번호로 발송
+      // 각 번호로 발송 (이미 변환된 Base64 사용)
       let successCount = 0;
       let failCount = 0;
 
       for (const phone of phoneNumbers) {
-        const success = await sendMMS(phone.number, imageBase64, textMessage);
+        const success = await sendMMS(phone.number, selectedImageBase64, textMessage);
         if (success) {
           successCount++;
         } else {
@@ -579,6 +561,60 @@ const ReportGenerator = ({ students = [] }) => {
       alert('MMS 발송에 실패했습니다.');
     } finally {
       setSendingMMS(false);
+    }
+  };
+
+  // 이미지 선택 시 Base64로 변환
+  const handleImageSelect = async (imageUrl) => {
+    setSelectedImageUrl(imageUrl);
+    setSelectedImageBase64(''); // 초기화
+
+    try {
+      // 프록시 없이 직접 이미지 로드 시도
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        try {
+          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          setSelectedImageBase64(base64);
+        } catch (e) {
+          console.log('Canvas toDataURL 실패, 원본 URL 사용');
+          // CORS 실패 시 다른 방법 시도
+          fetchImageAsBase64(imageUrl);
+        }
+      };
+      
+      img.onerror = () => {
+        console.log('이미지 로드 실패, fetch 방식 시도');
+        fetchImageAsBase64(imageUrl);
+      };
+      
+      img.src = imageUrl;
+    } catch (error) {
+      console.error('이미지 변환 실패:', error);
+    }
+  };
+
+  // fetch로 이미지를 Base64로 변환 (대체 방법)
+  const fetchImageAsBase64 = async (imageUrl) => {
+    try {
+      const response = await fetch(imageUrl, { mode: 'cors' });
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImageBase64(reader.result);
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('fetch 변환도 실패:', error);
     }
   };
 
@@ -638,6 +674,7 @@ const ReportGenerator = ({ students = [] }) => {
                 onChange={() => {
                   setReportMode('image');
                   setShowPreview(false);
+                  setSelectedImageBase64('');
                 }}
                 className="w-4 h-4"
               />
@@ -1030,6 +1067,7 @@ const ReportGenerator = ({ students = [] }) => {
                 onChange={(e) => {
                   setSelectedStudentId(e.target.value);
                   setSelectedImageUrl('');
+                  setSelectedImageBase64('');
                 }}
                 className="w-full p-3 border border-gray-300 rounded-lg text-lg"
               >
@@ -1056,7 +1094,7 @@ const ReportGenerator = ({ students = [] }) => {
                     {studentImages[selectedStudentId].map((img, idx) => (
                       <div
                         key={idx}
-                        onClick={() => setSelectedImageUrl(img.imageUrl)}
+                        onClick={() => handleImageSelect(img.imageUrl)}
                         className={`cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${
                           selectedImageUrl === img.imageUrl
                             ? 'border-purple-500 shadow-lg scale-105'
@@ -1091,13 +1129,18 @@ const ReportGenerator = ({ students = [] }) => {
                 <h3 className="font-bold text-lg mb-4 text-gray-800">📱 MMS 발송</h3>
 
                 <div className="mb-4">
-                  <img
-                    id="selected-image-preview"
-                    src={selectedImageUrl}
-                    alt="선택된 이미지"
-                    className="max-h-64 mx-auto rounded-lg shadow-md"
-                    crossOrigin="anonymous"
-                  />
+                  {selectedImageBase64 ? (
+                    <img
+                      id="selected-image-preview"
+                      src={selectedImageBase64}
+                      alt="선택된 이미지"
+                      className="max-h-64 mx-auto rounded-lg shadow-md"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-48 bg-gray-100 rounded-lg">
+                      <p className="text-gray-500">이미지 로딩 중...</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1159,11 +1202,11 @@ const ReportGenerator = ({ students = [] }) => {
 
                 <button
                   onClick={handleSendSavedImage}
-                  disabled={sendingMMS}
+                  disabled={sendingMMS || !selectedImageBase64}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg hover:shadow-lg transition disabled:from-gray-400 disabled:to-gray-500 font-semibold"
                 >
                   <Send size={18} />
-                  {sendingMMS ? 'MMS 발송 중...' : 'MMS로 이미지 발송'}
+                  {sendingMMS ? 'MMS 발송 중...' : !selectedImageBase64 ? '이미지 로딩 중...' : 'MMS로 이미지 발송'}
                 </button>
 
                 <p className="text-xs text-gray-500 mt-2 text-center">
