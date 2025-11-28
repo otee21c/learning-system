@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp, Camera, Image } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, query, where, orderBy } from 'firebase/firestore';
-import { db, auth } from '../../firebase';
+import { db, auth, storage } from '../../firebase';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
@@ -33,6 +34,17 @@ export default function StudentManager({ students }) {
     week: todayMonthWeek.week,
     content: ''
   });
+
+  // 이미지 관련 상태
+  const [imageStudent, setImageStudent] = useState(null); // 이미지 업로드 중인 학생
+  const [studentImages, setStudentImages] = useState({}); // 학생별 이미지 목록
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageForm, setImageForm] = useState({
+    title: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  const [selectedImageFile, setSelectedImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // 메모 데이터 로드
   useEffect(() => {
@@ -70,6 +82,149 @@ export default function StudentManager({ students }) {
     
     loadMemos();
   }, []);
+
+  // 이미지 데이터 로드
+  useEffect(() => {
+    const loadImages = async () => {
+      try {
+        const imagesRef = collection(db, 'studentImages');
+        const snapshot = await getDocs(imagesRef);
+        const imagesData = snapshot.docs.map(doc => ({
+          docId: doc.id,
+          ...doc.data()
+        }));
+        
+        // 학생별로 그룹화
+        const grouped = {};
+        imagesData.forEach(img => {
+          if (!grouped[img.studentId]) {
+            grouped[img.studentId] = [];
+          }
+          grouped[img.studentId].push(img);
+        });
+        
+        // 각 학생의 이미지를 최신순 정렬
+        Object.keys(grouped).forEach(studentId => {
+          grouped[studentId].sort((a, b) => new Date(b.date) - new Date(a.date));
+        });
+        
+        setStudentImages(grouped);
+      } catch (error) {
+        console.error('이미지 로드 실패:', error);
+      }
+    };
+    
+    loadImages();
+  }, []);
+
+  // 이미지 파일 선택 핸들러
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // 파일 크기 체크 (5MB 제한)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하로 업로드해주세요.');
+      return;
+    }
+
+    setSelectedImageFile(file);
+
+    // 미리보기 생성
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 이미지 저장
+  const handleSaveImage = async () => {
+    if (!imageStudent || !selectedImageFile) {
+      alert('이미지를 선택해주세요.');
+      return;
+    }
+
+    if (!imageForm.title.trim()) {
+      alert('이미지 제목을 입력해주세요.');
+      return;
+    }
+
+    setImageUploading(true);
+
+    try {
+      // Firebase Storage에 업로드
+      const fileName = `${Date.now()}_${selectedImageFile.name}`;
+      const storageRef = ref(storage, `student-images/${imageStudent.id}/${fileName}`);
+      await uploadBytes(storageRef, selectedImageFile);
+      const imageUrl = await getDownloadURL(storageRef);
+
+      // Firestore에 메타데이터 저장
+      await addDoc(collection(db, 'studentImages'), {
+        studentId: imageStudent.id,
+        studentName: imageStudent.name,
+        title: imageForm.title,
+        date: imageForm.date,
+        imageUrl: imageUrl,
+        storagePath: `student-images/${imageStudent.id}/${fileName}`,
+        createdAt: new Date()
+      });
+
+      // 상태 업데이트
+      const newImage = {
+        studentId: imageStudent.id,
+        studentName: imageStudent.name,
+        title: imageForm.title,
+        date: imageForm.date,
+        imageUrl: imageUrl
+      };
+
+      setStudentImages(prev => ({
+        ...prev,
+        [imageStudent.id]: [newImage, ...(prev[imageStudent.id] || [])]
+      }));
+
+      // 폼 초기화
+      setImageStudent(null);
+      setSelectedImageFile(null);
+      setImagePreview(null);
+      setImageForm({ title: '', date: new Date().toISOString().split('T')[0] });
+
+      alert('이미지가 저장되었습니다!');
+    } catch (error) {
+      console.error('이미지 저장 실패:', error);
+      alert('이미지 저장에 실패했습니다: ' + error.message);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  // 이미지 삭제
+  const handleDeleteImage = async (studentId, image) => {
+    if (!window.confirm(`"${image.title}" 이미지를 삭제하시겠습니까?`)) return;
+
+    try {
+      // Storage에서 삭제
+      if (image.storagePath) {
+        const storageRef = ref(storage, image.storagePath);
+        await deleteObject(storageRef).catch(() => {});
+      }
+
+      // Firestore에서 삭제
+      await deleteDoc(doc(db, 'studentImages', image.docId));
+
+      // 상태 업데이트
+      setStudentImages(prev => ({
+        ...prev,
+        [studentId]: prev[studentId].filter(img => img.docId !== image.docId)
+      }));
+
+      alert('이미지가 삭제되었습니다.');
+    } catch (error) {
+      console.error('이미지 삭제 실패:', error);
+      alert('이미지 삭제에 실패했습니다.');
+    }
+  };
 
   // 학생 추가
   const handleAddStudent = async () => {
@@ -466,6 +621,115 @@ export default function StudentManager({ students }) {
         </div>
       )}
 
+      {/* 이미지 업로드 모달 */}
+      {imageStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">
+                📷 {imageStudent.name} 이미지 저장
+              </h3>
+              <button
+                onClick={() => {
+                  setImageStudent(null);
+                  setSelectedImageFile(null);
+                  setImagePreview(null);
+                  setImageForm({ title: '', date: new Date().toISOString().split('T')[0] });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">날짜</label>
+                <input
+                  type="date"
+                  value={imageForm.date}
+                  onChange={(e) => setImageForm({ ...imageForm, date: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">제목/설명</label>
+                <input
+                  type="text"
+                  value={imageForm.title}
+                  onChange={(e) => setImageForm({ ...imageForm, title: e.target.value })}
+                  placeholder="예: 11월 4주차 성적표, 모의고사 결과..."
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">이미지 선택</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="w-full p-3 border border-gray-300 rounded-lg"
+                />
+                <p className="text-xs text-gray-500 mt-1">최대 5MB, JPG/PNG 파일</p>
+              </div>
+
+              {imagePreview && (
+                <div className="border rounded-lg p-2">
+                  <p className="text-sm text-gray-600 mb-2">미리보기:</p>
+                  <img
+                    src={imagePreview}
+                    alt="미리보기"
+                    className="max-h-48 mx-auto rounded-lg"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveImage}
+                disabled={imageUploading || !selectedImageFile}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:shadow-lg transition disabled:from-gray-400 disabled:to-gray-500"
+              >
+                {imageUploading ? '업로드 중...' : '이미지 저장'}
+              </button>
+            </div>
+
+            {/* 저장된 이미지 목록 */}
+            {studentImages[imageStudent.id] && studentImages[imageStudent.id].length > 0 && (
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <h4 className="font-semibold text-gray-700 mb-3">
+                  📂 저장된 이미지 ({studentImages[imageStudent.id].length}개)
+                </h4>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {studentImages[imageStudent.id].map((img, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={img.imageUrl}
+                          alt={img.title}
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                        <div>
+                          <p className="text-sm font-medium">{img.title}</p>
+                          <p className="text-xs text-gray-500">{img.date}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteImage(imageStudent.id, img)}
+                        className="p-1 text-red-500 hover:bg-red-100 rounded"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 학생 목록 */}
       <div className="space-y-6">
         {sortedGrades.map(grade => (
@@ -586,6 +850,13 @@ export default function StudentManager({ students }) {
                             <FileText size={16} />
                           </button>
                           <button
+                            onClick={() => setImageStudent(student)}
+                            className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition"
+                            title="이미지 저장"
+                          >
+                            <Camera size={16} />
+                          </button>
+                          <button
                             onClick={() => setEditingStudent(student)}
                             className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
                             title="정보 수정"
@@ -610,6 +881,7 @@ export default function StudentManager({ students }) {
                         <p>🆔 아이디: {student.id}</p>
                         <p>🔑 비밀번호: {student.password || '미등록'}</p>
                         <p>📝 시험 기록: {student.exams?.length || 0}개</p>
+                        <p>📷 저장된 이미지: {studentImages[student.id]?.length || 0}개</p>
                       </div>
 
                       {/* 수업 메모 히스토리 */}

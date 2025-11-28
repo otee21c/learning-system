@@ -9,6 +9,9 @@ const ReportGenerator = ({ students = [] }) => {
   const reportRef = useRef(null);
   const todayMonthWeek = getTodayMonthWeek();
 
+  // 리포트 모드: 'auto' (자동 생성) | 'image' (저장된 이미지 발송)
+  const [reportMode, setReportMode] = useState('auto');
+
   // 기간 선택 모드
   const [periodMode, setPeriodMode] = useState('monthly'); // 'monthly' | 'custom'
   
@@ -30,6 +33,10 @@ const ReportGenerator = ({ students = [] }) => {
   const [attendanceList, setAttendanceList] = useState([]);
   const [studentMemos, setStudentMemos] = useState([]);
   const [exams, setExams] = useState([]);
+
+  // 저장된 이미지 관련 (이미지 발송 모드용)
+  const [studentImages, setStudentImages] = useState({});
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
 
   // 리포트 데이터
   const [reportData, setReportData] = useState(null);
@@ -87,6 +94,29 @@ const ReportGenerator = ({ students = [] }) => {
         ...doc.data()
       }));
       setSavedDiagnoses(diagnosesData);
+
+      // 저장된 이미지 로드
+      const imagesSnapshot = await getDocs(collection(db, 'studentImages'));
+      const imagesData = imagesSnapshot.docs.map(doc => ({
+        docId: doc.id,
+        ...doc.data()
+      }));
+      
+      // 학생별로 그룹화
+      const groupedImages = {};
+      imagesData.forEach(img => {
+        if (!groupedImages[img.studentId]) {
+          groupedImages[img.studentId] = [];
+        }
+        groupedImages[img.studentId].push(img);
+      });
+      
+      // 각 학생의 이미지를 최신순 정렬
+      Object.keys(groupedImages).forEach(studentId => {
+        groupedImages[studentId].sort((a, b) => new Date(b.date) - new Date(a.date));
+      });
+      
+      setStudentImages(groupedImages);
 
     } catch (error) {
       console.error('데이터 로드 실패:', error);
@@ -465,6 +495,88 @@ const ReportGenerator = ({ students = [] }) => {
     }
   };
 
+  // 저장된 이미지로 MMS 발송 (이미지 발송 모드용)
+  const handleSendSavedImage = async () => {
+    if (!selectedStudent || !selectedImageUrl) {
+      alert('학생과 이미지를 선택해주세요.');
+      return;
+    }
+
+    // 전화번호 확인
+    const phoneNumbers = [];
+    if (mmsTarget === 'student' || mmsTarget === 'both') {
+      if (selectedStudent.phone) {
+        phoneNumbers.push({ type: '학생', number: selectedStudent.phone });
+      }
+    }
+    if (mmsTarget === 'parent' || mmsTarget === 'both') {
+      if (selectedStudent.parentPhone) {
+        phoneNumbers.push({ type: '학부모', number: selectedStudent.parentPhone });
+      }
+    }
+
+    if (phoneNumbers.length === 0) {
+      alert('발송할 전화번호가 없습니다.\n학생 정보에서 전화번호를 확인해주세요.');
+      return;
+    }
+
+    // 선택한 이미지 정보 찾기
+    const images = studentImages[selectedStudentId] || [];
+    const selectedImage = images.find(img => img.imageUrl === selectedImageUrl);
+
+    const confirmSend = window.confirm(
+      `${selectedStudent.name} 학생에게 이미지를 발송합니다.\n\n` +
+      `이미지: ${selectedImage?.title || '선택한 이미지'}\n` +
+      `발송 대상:\n${phoneNumbers.map(p => `- ${p.type}: ${p.number}`).join('\n')}\n\n` +
+      `계속하시겠습니까?`
+    );
+
+    if (!confirmSend) return;
+
+    setSendingMMS(true);
+
+    try {
+      // 이미지 URL을 Base64로 변환
+      const response = await fetch(selectedImageUrl);
+      const blob = await response.blob();
+      
+      const reader = new FileReader();
+      const imageBase64 = await new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+
+      // 텍스트 메시지
+      const textMessage = `[오늘의 국어 연구소]\n${selectedStudent.name} 학생\n${selectedImage?.title || '성적표'}입니다.`;
+
+      // 각 번호로 발송
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const phone of phoneNumbers) {
+        const success = await sendMMS(phone.number, imageBase64, textMessage);
+        if (success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      if (successCount > 0) {
+        alert(`MMS 발송 완료!\n성공: ${successCount}건\n실패: ${failCount}건`);
+      } else {
+        alert('MMS 발송에 실패했습니다.\nAligo API 설정을 확인해주세요.');
+      }
+
+    } catch (error) {
+      console.error('이미지 발송 실패:', error);
+      alert('이미지 발송에 실패했습니다.');
+    } finally {
+      setSendingMMS(false);
+    }
+  };
+
   // 기간 텍스트
   const getPeriodText = () => {
     if (periodMode === 'monthly') {
@@ -495,6 +607,43 @@ const ReportGenerator = ({ students = [] }) => {
           </h2>
         </div>
 
+        {/* 리포트 모드 선택 */}
+        <div className="mb-6 p-4 bg-gray-100 rounded-xl">
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="reportMode"
+                value="auto"
+                checked={reportMode === 'auto'}
+                onChange={() => {
+                  setReportMode('auto');
+                  setSelectedImageUrl('');
+                }}
+                className="w-4 h-4"
+              />
+              <span className="font-medium">📊 자동 리포트 생성</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="reportMode"
+                value="image"
+                checked={reportMode === 'image'}
+                onChange={() => {
+                  setReportMode('image');
+                  setShowPreview(false);
+                }}
+                className="w-4 h-4"
+              />
+              <span className="font-medium">📷 저장된 이미지 발송</span>
+            </label>
+          </div>
+        </div>
+
+        {/* 자동 리포트 모드 */}
+        {reportMode === 'auto' && (
+          <>
         {/* 기간 선택 */}
         <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
           <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
@@ -857,6 +1006,165 @@ const ReportGenerator = ({ students = [] }) => {
               </div>
             </div>
           </div>
+        )}
+        </>
+        )}
+
+        {/* 이미지 발송 모드 */}
+        {reportMode === 'image' && (
+          <>
+            {/* 학생 선택 */}
+            <div className="mb-6 p-6 bg-gradient-to-r from-green-50 to-teal-50 rounded-xl">
+              <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
+                <User size={20} />
+                1. 학생 선택
+              </h3>
+
+              <select
+                value={selectedStudentId}
+                onChange={(e) => {
+                  setSelectedStudentId(e.target.value);
+                  setSelectedImageUrl('');
+                }}
+                className="w-full p-3 border border-gray-300 rounded-lg text-lg"
+              >
+                <option value="">학생을 선택하세요</option>
+                {students.map(student => (
+                  <option key={student.id} value={student.id}>
+                    {student.name} ({student.grade}) {student.school && `- ${student.school}`}
+                    {studentImages[student.id]?.length > 0 && ` [이미지 ${studentImages[student.id].length}개]`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 이미지 선택 */}
+            {selectedStudentId && (
+              <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl">
+                <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
+                  <Image size={20} />
+                  2. 이미지 선택
+                </h3>
+
+                {studentImages[selectedStudentId] && studentImages[selectedStudentId].length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {studentImages[selectedStudentId].map((img, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setSelectedImageUrl(img.imageUrl)}
+                        className={`cursor-pointer rounded-xl overflow-hidden border-4 transition-all ${
+                          selectedImageUrl === img.imageUrl
+                            ? 'border-purple-500 shadow-lg scale-105'
+                            : 'border-transparent hover:border-gray-300'
+                        }`}
+                      >
+                        <img
+                          src={img.imageUrl}
+                          alt={img.title}
+                          className="w-full h-32 object-cover"
+                        />
+                        <div className="p-2 bg-white">
+                          <p className="text-sm font-medium truncate">{img.title}</p>
+                          <p className="text-xs text-gray-500">{img.date}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Image size={48} className="mx-auto mb-2 opacity-30" />
+                    <p>저장된 이미지가 없습니다.</p>
+                    <p className="text-sm mt-1">학생 관리 탭에서 이미지를 먼저 저장해주세요.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 선택된 이미지 미리보기 */}
+            {selectedImageUrl && (
+              <div className="mb-6 p-6 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl">
+                <h3 className="font-bold text-lg mb-4 text-gray-800">📱 MMS 발송</h3>
+
+                <div className="mb-4">
+                  <img
+                    src={selectedImageUrl}
+                    alt="선택된 이미지"
+                    className="max-h-64 mx-auto rounded-lg shadow-md"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  {/* 발송 대상 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">발송 대상</label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'student', label: '학생' },
+                        { value: 'parent', label: '학부모' },
+                        { value: 'both', label: '둘 다' }
+                      ].map(option => (
+                        <label key={option.value} className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="imageTarget"
+                            value={option.value}
+                            checked={mmsTarget === option.value}
+                            onChange={(e) => setMmsTarget(e.target.value)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 발신번호 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">발신번호</label>
+                    <select
+                      value={mmsSenderType}
+                      onChange={(e) => setMmsSenderType(e.target.value)}
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="personal">개인번호 (010-5453-5388)</option>
+                      <option value="sub">추가번호 (010-8466-1129)</option>
+                      <option value="main">대표번호 (02-562-5559)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 발송 정보 표시 */}
+                <div className="mb-3 p-3 bg-white rounded-lg text-sm">
+                  <p className="text-gray-600">📞 발송 대상 번호:</p>
+                  <div className="mt-1 space-y-1">
+                    {(mmsTarget === 'student' || mmsTarget === 'both') && (
+                      <p className={selectedStudent?.phone ? 'text-green-600' : 'text-red-500'}>
+                        • 학생: {selectedStudent?.phone || '번호 없음'}
+                      </p>
+                    )}
+                    {(mmsTarget === 'parent' || mmsTarget === 'both') && (
+                      <p className={selectedStudent?.parentPhone ? 'text-green-600' : 'text-red-500'}>
+                        • 학부모: {selectedStudent?.parentPhone || '번호 없음'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSendSavedImage}
+                  disabled={sendingMMS}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-lg hover:shadow-lg transition disabled:from-gray-400 disabled:to-gray-500 font-semibold"
+                >
+                  <Send size={18} />
+                  {sendingMMS ? 'MMS 발송 중...' : 'MMS로 이미지 발송'}
+                </button>
+
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  💡 MMS는 건당 약 50~100원의 비용이 발생합니다.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
