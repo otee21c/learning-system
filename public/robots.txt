@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://oneul-gugeo.vercel.app/sitemap.xml
