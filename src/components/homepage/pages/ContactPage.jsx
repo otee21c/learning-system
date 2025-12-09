@@ -17,6 +17,7 @@ export default function ContactPage() {
   const [phone, setPhone] = useState('');
   const [availableTime, setAvailableTime] = useState('');
   const [message, setMessage] = useState('');
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
 
   // 관리자 확인
   useEffect(() => {
@@ -53,6 +54,11 @@ export default function ContactPage() {
       return;
     }
 
+    if (!agreePrivacy) {
+      alert('개인정보 수집 및 이용에 동의해주세요.');
+      return;
+    }
+
     try {
       await addDoc(collection(db, 'inquiries'), {
         studentName,
@@ -70,6 +76,7 @@ export default function ContactPage() {
       setPhone('');
       setAvailableTime('');
       setMessage('');
+      setAgreePrivacy(false);
     } catch (error) {
       console.error('Error submitting:', error);
       alert('제출에 실패했습니다. 다시 시도해주세요.');
@@ -236,6 +243,24 @@ export default function ContactPage() {
                 />
               </div>
 
+              <div className="hp-form-group hp-checkbox-group">
+                <label className="hp-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={agreePrivacy}
+                    onChange={(e) => setAgreePrivacy(e.target.checked)}
+                  />
+                  <span>
+                    <Link to="/privacy" target="_blank" className="hp-privacy-link">개인정보처리방침</Link>에 동의합니다. <span className="hp-required">*</span>
+                  </span>
+                </label>
+                <p className="hp-checkbox-desc">
+                  수집 항목: 학생 이름, 학교/학년, 전화번호, 통화 가능 시간, 상담 내용<br />
+                  수집 목적: 상담 서비스 제공 및 상담 일정 조율<br />
+                  보유 기간: 상담 완료 후 1년
+                </p>
+              </div>
+
               <button type="submit" className="hp-btn hp-btn-primary hp-btn-large">
                 상담 신청하기
               </button>
@@ -252,6 +277,9 @@ export default function ContactPage() {
             <p>대표: 김봉관 | 사업자등록번호: 296-93-02203</p>
             <p>주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
             <p>대표전화: 02-562-5559</p>
+          </div>
+          <div className="hp-footer-links">
+            <Link to="/privacy">개인정보처리방침</Link>
           </div>
           <p className="hp-footer-copyright">© 2024 오늘의 국어 연구소. All rights reserved.</p>
         </div>

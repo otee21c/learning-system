@@ -142,6 +142,9 @@ export default function Homepage() {
             <p>주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
             <p>대표전화: 02-562-5559</p>
           </div>
+          <div className="hp-footer-links">
+            <Link to="/privacy">개인정보처리방침</Link>
+          </div>
           <p className="hp-footer-copyright">© 2024 오늘의 국어 연구소. All rights reserved.</p>
         </div>
       </footer>
