@@ -3,6 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import Homepage from './components/homepage/Homepage.jsx'
+import AboutPage from './components/homepage/pages/AboutPage.jsx'
+import NewsPage from './components/homepage/pages/NewsPage.jsx'
+import NoticePage from './components/homepage/pages/NoticePage.jsx'
+import ContactPage from './components/homepage/pages/ContactPage.jsx'
+import DaechiPage from './components/homepage/pages/DaechiPage.jsx'
+import DarakbangPage from './components/homepage/pages/DarakbangPage.jsx'
 
 // LMS는 필요할 때만 로드 (Firebase 에러 방지)
 const App = lazy(() => import('./App.jsx'))
@@ -45,6 +51,14 @@ createRoot(document.getElementById('root')).render(
       <Routes>
         {/* 메인 홈페이지 */}
         <Route path="/" element={<Homepage />} />
+        
+        {/* 서브 페이지들 */}
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/news" element={<NewsPage />} />
+        <Route path="/notice" element={<NoticePage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/daechi" element={<DaechiPage />} />
+        <Route path="/darakbang" element={<DarakbangPage />} />
         
         {/* LMS (학습관리시스템) - 필요할 때만 로드 */}
         <Route path="/lms" element={

@@ -8,16 +8,16 @@ export default function Homepage() {
       {/* 헤더 */}
       <header className="hp-header">
         <div className="hp-header-container">
-          <a href="/" className="hp-logo">
+          <Link to="/" className="hp-logo">
             <img src="/logo.png" alt="오늘의 국어 연구소" />
-          </a>
+          </Link>
           <nav className="hp-nav">
             <ul>
-              <li><a href="#">메인 화면</a></li>
-              <li><a href="#">오국 소개</a></li>
-              <li><a href="#">입시 정보</a></li>
-              <li><a href="#">공지 사항</a></li>
-              <li><a href="#">문자 상담</a></li>
+              <li><Link to="/">메인 화면</Link></li>
+              <li><Link to="/about">오국 소개</Link></li>
+              <li><Link to="/news">입시 정보</Link></li>
+              <li><Link to="/notice">공지 사항</Link></li>
+              <li><Link to="/contact">문자 상담</Link></li>
               <li><Link to="/lms" className="hp-highlight">회원 전용</Link></li>
             </ul>
           </nav>
@@ -62,8 +62,8 @@ export default function Homepage() {
             </span>
           </a>
 
-          {/* 대치 연구소 */}
-          <div className="hp-branch-card hp-main">
+          {/* 대치 연구소 - 클릭 가능 */}
+          <Link to="/daechi" className="hp-branch-card hp-main hp-clickable">
             <div className="hp-icon">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
@@ -72,7 +72,8 @@ export default function Homepage() {
             <h3>대치 연구소</h3>
             <p className="hp-location">서울 강남구 대치동</p>
             <p className="hp-description">오늘의 국어 연구소 본원입니다.<br />단 하나의 컨설팅 프로그램으로<br />실전적 국어 원리를 가르칩니다.</p>
-          </div>
+            <span className="hp-detail-link">자세히 보기</span>
+          </Link>
 
           {/* 배곧원 */}
           <a href="https://m.blog.naver.com/today_korea" target="_blank" rel="noopener noreferrer" className="hp-branch-card hp-sub">
@@ -93,14 +94,14 @@ export default function Homepage() {
           </a>
         </div>
 
-        {/* 청년다락방 */}
+        {/* 청년다락방 - 클릭 가능 */}
         <div className="hp-branch-bottom">
           <div className="hp-connector-line"></div>
-          <div className="hp-branch-card hp-mini">
+          <Link to="/darakbang" className="hp-branch-card hp-mini hp-clickable">
             <p className="hp-mini-line">오늘의 국어가 실천하는</p>
             <p className="hp-mini-line">사회적 가치 창조 공간</p>
             <p className="hp-mini-line hp-mini-highlight">청년 다락방</p>
-          </div>
+          </Link>
         </div>
       </section>
 
@@ -134,7 +135,15 @@ export default function Homepage() {
 
       {/* 푸터 */}
       <footer className="hp-footer">
-        <p>© 2024 오늘의 국어 연구소. All rights reserved.</p>
+        <div className="hp-footer-content">
+          <div className="hp-footer-info">
+            <p><strong>오늘의 국어</strong></p>
+            <p>대표: 김봉관 | 사업자등록번호: 296-93-02203</p>
+            <p>주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
+            <p>대표전화: 02-562-5559</p>
+          </div>
+          <p className="hp-footer-copyright">© 2024 오늘의 국어 연구소. All rights reserved.</p>
+        </div>
       </footer>
     </div>
   );
