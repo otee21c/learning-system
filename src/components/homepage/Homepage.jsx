@@ -138,10 +138,13 @@ export default function Homepage() {
         <div className="hp-footer-content">
           <div className="hp-footer-info">
             <p><strong>오늘의 국어</strong></p>
-            <p>대표: 김봉관 | 사업자등록번호: 296-93-02203</p>
-            <p>주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
-            <p>대표전화: 02-562-5559</p>
+            <p>대표: 김봉관 | 사업자등록번호: 296-93-02203 | 주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
           </div>
+          <div className="hp-footer-info">
+            <p><strong>오늘의 국어(퍼스널) 학원</strong></p>
+            <p>대표: 문옥정 | 사업자등록번호: 761-93-00825 | 주소: 서울시 광진구 광나루로 586, 4층</p>
+          </div>
+          <p className="hp-footer-phone">대표전화: 02-562-5559</p>
           <div className="hp-footer-links">
             <Link to="/privacy">개인정보처리방침</Link>
           </div>

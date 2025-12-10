@@ -14,7 +14,6 @@ export default function AboutPage() {
   const [editContent, setEditContent] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 관리자 확인
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && user.email === 'admin@test.com') {
@@ -26,7 +25,6 @@ export default function AboutPage() {
     return () => unsubscribe();
   }, []);
 
-  // 데이터 불러오기
   useEffect(() => {
     const fetchContent = async () => {
       try {
@@ -44,14 +42,12 @@ export default function AboutPage() {
     fetchContent();
   }, []);
 
-  // 수정 시작
   const handleEdit = () => {
     setEditTitle(title);
     setEditContent(content);
     setIsEditing(true);
   };
 
-  // 저장
   const handleSave = async () => {
     try {
       await setDoc(doc(db, 'pages', 'about'), {
@@ -69,7 +65,6 @@ export default function AboutPage() {
     }
   };
 
-  // 취소
   const handleCancel = () => {
     setIsEditing(false);
   };
@@ -84,7 +79,6 @@ export default function AboutPage() {
 
   return (
     <div className="homepage">
-      {/* 헤더 */}
       <header className="hp-header">
         <div className="hp-header-container">
           <Link to="/" className="hp-logo">
@@ -103,7 +97,6 @@ export default function AboutPage() {
         </div>
       </header>
 
-      {/* 페이지 내용 */}
       <div className="hp-page-container">
         <div className="hp-page-header">
           <h1>오국 소개</h1>
@@ -153,14 +146,19 @@ export default function AboutPage() {
         </div>
       </div>
 
-      {/* 푸터 */}
       <footer className="hp-footer">
         <div className="hp-footer-content">
           <div className="hp-footer-info">
             <p><strong>오늘의 국어</strong></p>
-            <p>대표: 김봉관 | 사업자등록번호: 296-93-02203</p>
-            <p>주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
-            <p>대표전화: 02-562-5559</p>
+            <p>대표: 김봉관 | 사업자등록번호: 296-93-02203 | 주소: 서울시 강남구 도곡로73길 13, 1층 101호</p>
+          </div>
+          <div className="hp-footer-info">
+            <p><strong>오늘의 국어(퍼스널) 학원</strong></p>
+            <p>대표: 문옥정 | 사업자등록번호: 761-93-00825 | 주소: 서울시 광진구 광나루로 586, 4층</p>
+          </div>
+          <p className="hp-footer-phone">대표전화: 02-562-5559</p>
+          <div className="hp-footer-links">
+            <Link to="/privacy">개인정보처리방침</Link>
           </div>
           <p className="hp-footer-copyright">© 2024 오늘의 국어 연구소. All rights reserved.</p>
         </div>
