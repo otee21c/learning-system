@@ -138,6 +138,16 @@ export default function StudentManager({ students }) {
     reader.readAsDataURL(file);
   };
 
+  // 파일을 Base64로 변환하는 함수
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 이미지 저장
   const handleSaveImage = async () => {
     if (!imageStudent || !selectedImageFile) {
@@ -159,13 +169,17 @@ export default function StudentManager({ students }) {
       await uploadBytes(storageRef, selectedImageFile);
       const imageUrl = await getDownloadURL(storageRef);
 
-      // Firestore에 메타데이터 저장
+      // Base64로 변환 (MMS 발송용)
+      const imageBase64 = await fileToBase64(selectedImageFile);
+
+      // Firestore에 메타데이터 저장 (Base64 포함)
       await addDoc(collection(db, 'studentImages'), {
         studentId: imageStudent.id,
         studentName: imageStudent.name,
         title: imageForm.title,
         date: imageForm.date,
         imageUrl: imageUrl,
+        imageBase64: imageBase64,  // MMS 발송용 Base64 데이터
         storagePath: `student-images/${imageStudent.id}/${fileName}`,
         createdAt: new Date()
       });
@@ -176,7 +190,8 @@ export default function StudentManager({ students }) {
         studentName: imageStudent.name,
         title: imageForm.title,
         date: imageForm.date,
-        imageUrl: imageUrl
+        imageUrl: imageUrl,
+        imageBase64: imageBase64
       };
 
       setStudentImages(prev => ({

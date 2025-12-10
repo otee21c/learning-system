@@ -564,11 +564,24 @@ const ReportGenerator = ({ students = [] }) => {
     }
   };
 
-  // 이미지 선택 시 Base64로 변환
+  // 이미지 선택 시 Base64 처리
   const handleImageSelect = async (imageUrl) => {
     setSelectedImageUrl(imageUrl);
     setSelectedImageBase64(''); // 초기화
 
+    // 저장된 이미지에서 Base64 데이터 찾기
+    const images = studentImages[selectedStudentId] || [];
+    const selectedImage = images.find(img => img.imageUrl === imageUrl);
+    
+    // 이미 저장된 Base64가 있으면 바로 사용
+    if (selectedImage?.imageBase64) {
+      console.log('✅ 저장된 Base64 데이터 사용');
+      setSelectedImageBase64(selectedImage.imageBase64);
+      return;
+    }
+
+    // 저장된 Base64가 없으면 기존 방식으로 변환 시도
+    console.log('⚠️ 저장된 Base64가 없어서 변환 시도');
     try {
       // 프록시 없이 직접 이미지 로드 시도
       const img = new window.Image();
