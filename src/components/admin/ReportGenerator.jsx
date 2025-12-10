@@ -580,10 +580,37 @@ const ReportGenerator = ({ students = [] }) => {
       return;
     }
 
-    // 저장된 Base64가 없으면 기존 방식으로 변환 시도
-    console.log('⚠️ 저장된 Base64가 없어서 변환 시도');
+    // 저장된 Base64가 없으면 API를 통해 변환
+    console.log('⚠️ 저장된 Base64가 없어서 API로 변환 시도');
     try {
-      // 프록시 없이 직접 이미지 로드 시도
+      const response = await fetch('/api/fetch-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.base64) {
+        console.log('✅ API를 통해 Base64 변환 성공');
+        setSelectedImageBase64(data.base64);
+      } else {
+        console.error('❌ API 변환 실패:', data.error);
+        // 실패 시 기존 방식으로 재시도
+        fallbackImageConvert(imageUrl);
+      }
+    } catch (error) {
+      console.error('API 호출 실패:', error);
+      // API 실패 시 기존 방식으로 재시도
+      fallbackImageConvert(imageUrl);
+    }
+  };
+
+  // 기존 방식 (fallback)
+  const fallbackImageConvert = (imageUrl) => {
+    try {
       const img = new window.Image();
       img.crossOrigin = 'anonymous';
       
@@ -598,20 +625,19 @@ const ReportGenerator = ({ students = [] }) => {
           const base64 = canvas.toDataURL('image/jpeg', 0.8);
           setSelectedImageBase64(base64);
         } catch (e) {
-          console.log('Canvas toDataURL 실패, 원본 URL 사용');
-          // CORS 실패 시 다른 방법 시도
+          console.log('Canvas toDataURL 실패');
           fetchImageAsBase64(imageUrl);
         }
       };
       
       img.onerror = () => {
-        console.log('이미지 로드 실패, fetch 방식 시도');
+        console.log('이미지 로드 실패');
         fetchImageAsBase64(imageUrl);
       };
       
       img.src = imageUrl;
     } catch (error) {
-      console.error('이미지 변환 실패:', error);
+      console.error('fallback 변환 실패:', error);
     }
   };
 
