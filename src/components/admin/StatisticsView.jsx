@@ -109,9 +109,14 @@ export default function StatisticsView({ students, exams }) {
   const handleEditStart = (student, examIndex) => {
     const exam = student.exams[examIndex];
     
+    // docId가 없으면 경고
+    if (!student.docId) {
+      console.warn('학생 docId가 없습니다:', student);
+    }
+    
     setEditingExam({
       studentId: student.id,
-      studentDocId: student.docId, // Firebase 문서 ID
+      docId: student.docId, // Firebase 문서 ID (핵심!)
       filteredIndex: examIndex,
       originalExam: exam // 원본 시험 데이터 저장
     });
@@ -127,6 +132,13 @@ export default function StatisticsView({ students, exams }) {
     if (!editingExam) return;
     
     try {
+      // docId 확인 (필수)
+      const docId = editingExam.docId;
+      if (!docId) {
+        alert('Firebase 문서 ID를 찾을 수 없습니다. 페이지를 새로고침 후 다시 시도해주세요.');
+        return;
+      }
+      
       const student = students.find(s => s.id === editingExam.studentId);
       if (!student || !student.exams) {
         alert('학생 정보를 찾을 수 없습니다.');
@@ -156,8 +168,8 @@ export default function StatisticsView({ students, exams }) {
         return e;
       });
       
-      // docId 사용 (Firebase 문서 ID)
-      const docId = editingExam.studentDocId || student.docId || editingExam.studentId;
+      console.log('수정 시도 - docId:', docId); // 디버깅용
+      
       await updateDoc(doc(db, 'students', docId), {
         exams: updatedExams
       });
@@ -185,9 +197,14 @@ export default function StatisticsView({ students, exams }) {
   const handleDeleteConfirm = (student, examIndex) => {
     const exam = student.exams[examIndex];
     
+    // docId가 없으면 경고
+    if (!student.docId) {
+      console.warn('학생 docId가 없습니다:', student);
+    }
+    
     setDeleteConfirm({
       studentId: student.id,
-      studentDocId: student.docId, // Firebase 문서 ID
+      docId: student.docId, // Firebase 문서 ID (핵심!)
       studentName: student.name,
       exam: exam, // 시험 데이터 전체 저장
       examTitle: exam.examTitle || '시험'
@@ -199,6 +216,13 @@ export default function StatisticsView({ students, exams }) {
     if (!deleteConfirm) return;
     
     try {
+      // docId 확인 (필수)
+      const docId = deleteConfirm.docId;
+      if (!docId) {
+        alert('Firebase 문서 ID를 찾을 수 없습니다. 페이지를 새로고침 후 다시 시도해주세요.');
+        return;
+      }
+      
       const student = students.find(s => s.id === deleteConfirm.studentId);
       if (!student || !student.exams) {
         alert('학생 정보를 찾을 수 없습니다.');
@@ -224,8 +248,8 @@ export default function StatisticsView({ students, exams }) {
         return;
       }
       
-      // docId 사용 (Firebase 문서 ID)
-      const docId = deleteConfirm.studentDocId || student.docId || deleteConfirm.studentId;
+      console.log('삭제 시도 - docId:', docId); // 디버깅용
+      
       await updateDoc(doc(db, 'students', docId), {
         exams: updatedExams
       });

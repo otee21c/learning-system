@@ -91,9 +91,12 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
 
-    // 학생 데이터
+    // 학생 데이터 (docId: Firebase 문서 ID, id: 학생 ID)
     const unsubStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs.map(doc => ({ 
+        docId: doc.id,  // Firebase 문서 ID (수정/삭제에 사용)
+        ...doc.data()   // 학생 데이터 (id: 학생 ID 포함)
+      }));
       if (data.length > 0) setStudents(data);
     });
 
