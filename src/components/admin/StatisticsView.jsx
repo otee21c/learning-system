@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { User, TrendingUp, BarChart3 } from 'lucide-react';
+import { User, TrendingUp, BarChart3, Edit3, Trash2, Save, X, Filter } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
 export default function StatisticsView({ students, exams }) {
@@ -8,6 +10,20 @@ export default function StatisticsView({ students, exams }) {
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
   const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
   
+  // 시험 종류 필터
+  const [selectedExamType, setSelectedExamType] = useState('all');
+  
+  // 수정 모드
+  const [editingExam, setEditingExam] = useState(null); // { studentId, examIndex, data }
+  const [editForm, setEditForm] = useState({
+    examTitle: '',
+    totalScore: '',
+    percentage: ''
+  });
+  
+  // 삭제 확인
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { studentId, examIndex }
+
   // 선택한 월/주차에 해당하는 시험만 필터링
   const filteredExams = exams.filter(exam => 
     exam.month === selectedMonth && exam.week === selectedWeek
@@ -17,22 +33,43 @@ export default function StatisticsView({ students, exams }) {
   const filteredExamIds = filteredExams.map(exam => exam.id);
   
   // 학생 데이터를 필터링 (선택한 월/주차의 시험만 포함)
-  // - 시험 관리에서 등록된 시험 (examId 매칭)
-  // - 수동 입력 성적 (월/주차 매칭)
-  const filteredStudents = students.map(student => ({
-    ...student,
-    exams: student.exams?.filter(exam => 
+  const filteredStudents = students.map(student => {
+    let studentExams = student.exams?.filter(exam => 
       filteredExamIds.includes(exam.examId) ||
       (exam.manualEntry && exam.month === selectedMonth && exam.week === selectedWeek)
-    ) || []
-  }));
+    ) || [];
+    
+    // 시험 종류 필터 적용
+    if (selectedExamType !== 'all') {
+      studentExams = studentExams.filter(exam => 
+        exam.examTitle?.includes(selectedExamType) || 
+        exam.examType === selectedExamType
+      );
+    }
+    
+    return {
+      ...student,
+      exams: studentExams
+    };
+  });
+
+  // 시험 종류 목록 추출 (중복 제거)
+  const examTypes = [...new Set(
+    students.flatMap(s => s.exams || [])
+      .filter(e => 
+        filteredExamIds.includes(e.examId) ||
+        (e.manualEntry && e.month === selectedMonth && e.week === selectedWeek)
+      )
+      .map(e => e.examTitle || e.examType || '기타')
+  )];
+
   // 전체 평균 계산
   const calculateOverallStats = () => {
     const allExams = filteredStudents.flatMap(s => s.exams || []);
     if (allExams.length === 0) return { avgScore: 0, avgPercentage: 0, totalExams: 0 };
 
-    const avgScore = allExams.reduce((sum, e) => sum + e.totalScore, 0) / allExams.length;
-    const avgPercentage = allExams.reduce((sum, e) => sum + parseFloat(e.percentage), 0) / allExams.length;
+    const avgScore = allExams.reduce((sum, e) => sum + (e.totalScore || 0), 0) / allExams.length;
+    const avgPercentage = allExams.reduce((sum, e) => sum + parseFloat(e.percentage || 0), 0) / allExams.length;
     const totalExams = filteredStudents.reduce((sum, s) => sum + (s.exams?.length || 0), 0);
 
     return {
@@ -46,8 +83,8 @@ export default function StatisticsView({ students, exams }) {
   const calculateStudentAvg = (student) => {
     if (!student.exams || student.exams.length === 0) return { avgScore: 0, avgPercentage: 0 };
 
-    const avgScore = student.exams.reduce((sum, e) => sum + e.totalScore, 0) / student.exams.length;
-    const avgPercentage = student.exams.reduce((sum, e) => sum + parseFloat(e.percentage), 0) / student.exams.length;
+    const avgScore = student.exams.reduce((sum, e) => sum + (e.totalScore || 0), 0) / student.exams.length;
+    const avgPercentage = student.exams.reduce((sum, e) => sum + parseFloat(e.percentage || 0), 0) / student.exams.length;
 
     return {
       avgScore: avgScore.toFixed(1),
@@ -60,12 +97,119 @@ export default function StatisticsView({ students, exams }) {
     if (!student.exams || student.exams.length < 2) return null;
 
     const recentExams = student.exams.slice(-2);
-    const diff = recentExams[1].totalScore - recentExams[0].totalScore;
+    const diff = (recentExams[1].totalScore || 0) - (recentExams[0].totalScore || 0);
 
     return {
       direction: diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
       value: Math.abs(diff)
     };
+  };
+
+  // 수정 시작
+  const handleEditStart = (student, examIndex) => {
+    const exam = student.exams[examIndex];
+    // 원본 students 배열에서 해당 시험의 실제 인덱스 찾기
+    const originalStudent = students.find(s => s.id === student.id);
+    const originalExamIndex = originalStudent.exams?.findIndex(e => 
+      e.examTitle === exam.examTitle && 
+      e.date === exam.date &&
+      e.totalScore === exam.totalScore
+    );
+    
+    setEditingExam({
+      studentId: student.id,
+      examIndex: originalExamIndex,
+      filteredIndex: examIndex
+    });
+    setEditForm({
+      examTitle: exam.examTitle || '',
+      totalScore: exam.totalScore?.toString() || '',
+      percentage: exam.percentage?.toString() || ''
+    });
+  };
+
+  // 수정 저장
+  const handleEditSave = async () => {
+    if (!editingExam) return;
+    
+    try {
+      const student = students.find(s => s.id === editingExam.studentId);
+      if (!student || !student.exams) return;
+      
+      const updatedExams = [...student.exams];
+      updatedExams[editingExam.examIndex] = {
+        ...updatedExams[editingExam.examIndex],
+        examTitle: editForm.examTitle,
+        totalScore: parseInt(editForm.totalScore) || 0,
+        percentage: editForm.percentage,
+        modifiedAt: new Date().toISOString()
+      };
+      
+      await updateDoc(doc(db, 'students', editingExam.studentId), {
+        exams: updatedExams
+      });
+      
+      setEditingExam(null);
+      setEditForm({ examTitle: '', totalScore: '', percentage: '' });
+      alert('성적이 수정되었습니다.');
+      
+      // 페이지 새로고침으로 데이터 반영
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('성적 수정 실패:', error);
+      alert('성적 수정에 실패했습니다.');
+    }
+  };
+
+  // 수정 취소
+  const handleEditCancel = () => {
+    setEditingExam(null);
+    setEditForm({ examTitle: '', totalScore: '', percentage: '' });
+  };
+
+  // 삭제 확인
+  const handleDeleteConfirm = (student, examIndex) => {
+    const exam = student.exams[examIndex];
+    const originalStudent = students.find(s => s.id === student.id);
+    const originalExamIndex = originalStudent.exams?.findIndex(e => 
+      e.examTitle === exam.examTitle && 
+      e.date === exam.date &&
+      e.totalScore === exam.totalScore
+    );
+    
+    setDeleteConfirm({
+      studentId: student.id,
+      studentName: student.name,
+      examIndex: originalExamIndex,
+      examTitle: exam.examTitle
+    });
+  };
+
+  // 삭제 실행
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    
+    try {
+      const student = students.find(s => s.id === deleteConfirm.studentId);
+      if (!student || !student.exams) return;
+      
+      const updatedExams = student.exams.filter((_, idx) => idx !== deleteConfirm.examIndex);
+      
+      await updateDoc(doc(db, 'students', deleteConfirm.studentId), {
+        exams: updatedExams
+      });
+      
+      setDeleteConfirm(null);
+      alert('성적이 삭제되었습니다.');
+      
+      // 페이지 새로고침으로 데이터 반영
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('성적 삭제 실패:', error);
+      alert('성적 삭제에 실패했습니다.');
+    }
   };
 
   const overallStats = calculateOverallStats();
@@ -80,7 +224,7 @@ export default function StatisticsView({ students, exams }) {
         {/* 월/주차 선택 */}
         <div className="mb-6 p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl">
           <h3 className="font-bold text-lg mb-4 text-gray-800">조회 기간 선택</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">월 선택</label>
               <select
@@ -105,11 +249,30 @@ export default function StatisticsView({ students, exams }) {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">시험 종류</label>
+              <select
+                value={selectedExamType}
+                onChange={(e) => setSelectedExamType(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                <option value="all">전체 시험</option>
+                {examTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="mt-3 text-sm text-gray-600 bg-white p-3 rounded-lg">
-            💡 선택된 기간: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedWeek}주차</span>
+          <div className="mt-3 text-sm text-gray-600 bg-white p-3 rounded-lg flex items-center gap-2">
+            <Filter size={16} className="text-indigo-500" />
+            <span>선택된 기간: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedWeek}주차</span></span>
+            {selectedExamType !== 'all' && (
+              <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                {selectedExamType}
+              </span>
+            )}
             {filteredExams.length > 0 && (
-              <span className="ml-2">({filteredExams.length}개 시험)</span>
+              <span className="ml-2 text-gray-500">({filteredExams.length}개 시험)</span>
             )}
           </div>
         </div>
@@ -182,14 +345,14 @@ export default function StatisticsView({ students, exams }) {
                       <div className="bg-white p-4 rounded-xl shadow-sm">
                         <p className="text-xs text-gray-600 mb-1">최고 점수</p>
                         <p className="text-2xl font-bold text-blue-600">
-                          {Math.max(...student.exams.map(e => e.totalScore))}점
+                          {Math.max(...student.exams.map(e => e.totalScore || 0))}점
                         </p>
                       </div>
                       <div className="bg-white p-4 rounded-xl shadow-sm">
                         <p className="text-xs text-gray-600 mb-1">최근 성적</p>
                         <div className="flex items-center gap-1">
                           <p className="text-2xl font-bold text-purple-600">
-                            {student.exams[student.exams.length - 1].totalScore}점
+                            {student.exams[student.exams.length - 1].totalScore || 0}점
                           </p>
                           {trend && trend.direction !== 'same' && (
                             <TrendingUp 
@@ -201,20 +364,89 @@ export default function StatisticsView({ students, exams }) {
                       </div>
                     </div>
 
-                    {/* 시험별 상세 */}
+                    {/* 시험별 상세 - 수정/삭제 기능 추가 */}
                     <div className="border-t-2 border-gray-200 pt-4">
-                      <p className="text-sm font-semibold mb-3 text-gray-700">시험별 성적</p>
+                      <p className="text-sm font-semibold mb-3 text-gray-700">시험별 성적 (수정/삭제 가능)</p>
                       <div className="space-y-2">
                         {student.exams.map((exam, idx) => (
                           <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border shadow-sm">
-                            <div>
-                              <p className="font-semibold text-sm">{exam.examTitle}</p>
-                              <p className="text-xs text-gray-600">{exam.date}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-lg text-indigo-600">{exam.totalScore}점</p>
-                              <p className="text-xs text-gray-600">{exam.percentage}%</p>
-                            </div>
+                            {editingExam?.studentId === student.id && editingExam?.filteredIndex === idx ? (
+                              // 수정 모드
+                              <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <input
+                                  type="text"
+                                  value={editForm.examTitle}
+                                  onChange={(e) => setEditForm({ ...editForm, examTitle: e.target.value })}
+                                  placeholder="시험명"
+                                  className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <input
+                                  type="number"
+                                  value={editForm.totalScore}
+                                  onChange={(e) => setEditForm({ ...editForm, totalScore: e.target.value })}
+                                  placeholder="점수"
+                                  className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={editForm.percentage}
+                                  onChange={(e) => setEditForm({ ...editForm, percentage: e.target.value })}
+                                  placeholder="정답률 (%)"
+                                  className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={handleEditSave}
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+                                  >
+                                    <Save size={16} />
+                                    저장
+                                  </button>
+                                  <button
+                                    onClick={handleEditCancel}
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-gray-400 text-white rounded-lg hover:bg-gray-500 transition"
+                                  >
+                                    <X size={16} />
+                                    취소
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              // 보기 모드
+                              <>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-sm">{exam.examTitle || '시험'}</p>
+                                  <p className="text-xs text-gray-600">
+                                    {exam.date}
+                                    {exam.manualEntry && (
+                                      <span className="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">
+                                        수동입력
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="text-right mr-4">
+                                  <p className="font-bold text-lg text-indigo-600">{exam.totalScore || 0}점</p>
+                                  <p className="text-xs text-gray-600">{exam.percentage || 0}%</p>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleEditStart(student, idx)}
+                                    className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                                    title="수정"
+                                  >
+                                    <Edit3 size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteConfirm(student, idx)}
+                                    className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
+                                    title="삭제"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -248,6 +480,36 @@ export default function StatisticsView({ students, exams }) {
           </div>
         )}
       </div>
+
+      {/* 삭제 확인 모달 */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold mb-4 text-gray-800">성적 삭제 확인</h3>
+            <p className="text-gray-600 mb-6">
+              <span className="font-semibold text-indigo-600">{deleteConfirm.studentName}</span> 학생의
+              <span className="font-semibold text-red-600"> "{deleteConfirm.examTitle}"</span> 성적을 삭제하시겠습니까?
+            </p>
+            <p className="text-sm text-red-500 mb-6">
+              ⚠️ 삭제된 성적은 복구할 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
