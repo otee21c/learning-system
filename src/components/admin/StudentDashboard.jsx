@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
   CheckCircle, XCircle, Clock, AlertCircle
 } from 'lucide-react';
-import { getTodayMonthWeek } from '../../utils/dateUtils';
+import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
 const StudentDashboard = ({ students = [] }) => {
   const todayMonthWeek = getTodayMonthWeek();
@@ -19,8 +19,8 @@ const StudentDashboard = ({ students = [] }) => {
   // 데이터 상태
   const [attendanceData, setAttendanceData] = useState([]);
   const [curriculumData, setCurriculumData] = useState([]);
-  const [homeworkData, setHomeworkData] = useState([]);
-  const [examResults, setExamResults] = useState([]);
+  const [homeworkData, setHomeworkData] = useState([]);  // 제출 기록
+  const [assignmentsData, setAssignmentsData] = useState([]);  // 과제 목록
   const [memoData, setMemoData] = useState([]);
   
   // 편집 상태
@@ -49,13 +49,13 @@ const StudentDashboard = ({ students = [] }) => {
       const curriculumSnapshot = await getDocs(collection(db, 'curriculums'));
       setCurriculumData(curriculumSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
-      // 숙제 데이터
+      // 과제 목록
+      const assignmentsSnapshot = await getDocs(query(collection(db, 'assignments'), orderBy('createdAt', 'desc')));
+      setAssignmentsData(assignmentsSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
+
+      // 숙제 제출 데이터
       const homeworkSnapshot = await getDocs(collection(db, 'homeworkSubmissions'));
       setHomeworkData(homeworkSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
-
-      // 시험 결과 데이터
-      const examResultsSnapshot = await getDocs(collection(db, 'examResults'));
-      setExamResults(examResultsSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
       // 메모 데이터
       const memoSnapshot = await getDocs(collection(db, 'studentMemos'));
@@ -77,14 +77,15 @@ const StudentDashboard = ({ students = [] }) => {
     return record?.status || '-';
   };
 
-  // 학생별 커리큘럼 가져오기
+  // 학생별 커리큘럼 가져오기 (수정됨!)
   const getCurriculum = (studentId) => {
+    // 커리큘럼의 students 배열에 해당 학생이 포함되어 있는지 확인
     const record = curriculumData.find(c => 
-      c.studentId === studentId && 
+      c.students?.includes(studentId) && 
       c.month === selectedMonth && 
-      c.week === selectedWeek
+      c.weekNumber === selectedWeek  // weekNumber 필드 사용
     );
-    return record?.curriculum || '-';
+    return record?.title || '-';
   };
 
   // 학생별 숙제 현황 가져오기
@@ -106,20 +107,27 @@ const StudentDashboard = ({ students = [] }) => {
     // 총 완료 수 (제출 + 개별확인완료)
     const totalComplete = submitted + manualComplete;
     
-    if (manualPending > 0) return `확인예정 ${manualPending}개`;
-    if (totalComplete > 0) return `${totalComplete}개 완료`;
-    return '미제출';
+    if (manualPending > 0) return { text: `확인예정 ${manualPending}`, type: 'pending' };
+    if (totalComplete > 0) return { text: `${totalComplete}개 완료`, type: 'complete' };
+    return { text: '미제출', type: 'none' };
   };
 
-  // 학생별 최근 성적 가져오기
+  // 학생별 성적 가져오기 (수정됨! - students prop에서 가져옴)
   const getRecentScore = (studentId) => {
-    const results = examResults
-      .filter(e => e.studentId === studentId)
-      .sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+    const student = students.find(s => s.id === studentId);
+    if (!student?.exams || student.exams.length === 0) return '-';
     
-    if (results.length > 0 && results[0].score !== undefined) {
-      return `${results[0].score}점`;
+    // 해당 월/주차의 시험 결과 필터링
+    const monthWeekExams = student.exams.filter(e => 
+      e.month === selectedMonth && e.week === selectedWeek
+    );
+    
+    if (monthWeekExams.length > 0) {
+      // 가장 최근 시험
+      const latestExam = monthWeekExams[monthWeekExams.length - 1];
+      return `${latestExam.totalScore || latestExam.score || 0}점`;
     }
+    
     return '-';
   };
 
@@ -130,7 +138,7 @@ const StudentDashboard = ({ students = [] }) => {
       m.month === selectedMonth && 
       m.week === selectedWeek
     );
-    return record?.content || '';  // content 필드 사용 (StudentManager와 동일)
+    return record?.content || '';
   };
 
   // 출결 상태 아이콘
@@ -153,13 +161,12 @@ const StudentDashboard = ({ students = [] }) => {
         a.week === selectedWeek
       );
 
-      // 오늘 날짜 (YYYY-MM-DD 형식)
       const today = new Date().toISOString().split('T')[0];
 
       if (existing) {
         await updateDoc(doc(db, 'attendance', existing.docId), { 
           status: newStatus,
-          date: existing.date || today, // 기존 date 유지 또는 오늘 날짜
+          date: existing.date || today,
           timestamp: new Date()
         });
       } else {
@@ -169,7 +176,7 @@ const StudentDashboard = ({ students = [] }) => {
           studentName: student?.name || '',
           month: selectedMonth,
           week: selectedWeek,
-          date: today, // 날짜 필드 추가
+          date: today,
           status: newStatus,
           note: '',
           timestamp: new Date()
@@ -179,6 +186,44 @@ const StudentDashboard = ({ students = [] }) => {
     } catch (error) {
       console.error('출결 저장 실패:', error);
       alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 과제 수동 상태 변경 (새로 추가!)
+  const handleHomeworkStatusChange = async (studentId, newStatus) => {
+    try {
+      const student = students.find(s => s.id === studentId);
+      
+      // 해당 월/주차의 기존 제출 기록 찾기
+      const existing = homeworkData.find(h => 
+        h.studentId === studentId && 
+        h.month === selectedMonth && 
+        h.week === selectedWeek
+      );
+
+      if (existing) {
+        // 기존 기록 업데이트
+        await updateDoc(doc(db, 'homeworkSubmissions', existing.docId), {
+          manualStatus: newStatus,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // 새 기록 생성
+        await addDoc(collection(db, 'homeworkSubmissions'), {
+          studentId: studentId,
+          studentName: student?.name || '',
+          month: selectedMonth,
+          week: selectedWeek,
+          manualStatus: newStatus,
+          submitted: false,
+          submittedAt: serverTimestamp()
+        });
+      }
+
+      loadAllData();
+    } catch (error) {
+      console.error('과제 상태 변경 실패:', error);
+      alert('상태 변경에 실패했습니다.');
     }
   };
 
@@ -200,7 +245,7 @@ const StudentDashboard = ({ students = [] }) => {
           studentName: student?.name || '',
           month: selectedMonth,
           week: selectedWeek,
-          content: memoContent,  // content 필드 사용 (StudentManager와 동일)
+          content: memoContent,
           createdAt: new Date().toISOString()
         });
       }
@@ -258,6 +303,16 @@ const StudentDashboard = ({ students = [] }) => {
   const cancelEdit = () => {
     setEditingCell(null);
     setEditValue('');
+  };
+
+  // 현재 학생의 과제 수동 상태 가져오기
+  const getHomeworkManualStatus = (studentId) => {
+    const record = homeworkData.find(h => 
+      h.studentId === studentId && 
+      h.month === selectedMonth && 
+      h.week === selectedWeek
+    );
+    return record?.manualStatus || '';
   };
 
   if (loading) {
@@ -362,7 +417,7 @@ const StudentDashboard = ({ students = [] }) => {
                     커리큘럼
                   </div>
                 </th>
-                <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-28">
+                <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-40">
                   <div className="flex items-center justify-center gap-2">
                     <BookOpen size={16} />
                     과제
@@ -398,6 +453,7 @@ const StudentDashboard = ({ students = [] }) => {
                   const attendanceStatus = getAttendanceStatus(student.id);
                   const curriculum = getCurriculum(student.id);
                   const homeworkStatus = getHomeworkStatus(student.id);
+                  const homeworkManualStatus = getHomeworkManualStatus(student.id);
                   const recentScore = getRecentScore(student.id);
                   const memo = getMemo(student.id);
                   const isEditingMemo = editingCell?.studentId === student.id && editingCell?.field === 'memo';
@@ -454,15 +510,23 @@ const StudentDashboard = ({ students = [] }) => {
                           </span>
                         </td>
 
-                        {/* 과제 */}
+                        {/* 과제 (수동 변경 가능!) */}
                         <td className="px-4 py-3 text-center">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            homeworkStatus === '미제출' ? 'bg-red-100 text-red-700' : 
-                            homeworkStatus.includes('예정') ? 'bg-yellow-100 text-yellow-700' :
-                            'bg-blue-100 text-blue-700'
-                          }`}>
-                            {homeworkStatus}
-                          </span>
+                          <select
+                            value={homeworkManualStatus}
+                            onChange={(e) => handleHomeworkStatusChange(student.id, e.target.value)}
+                            className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer border focus:ring-2 focus:ring-indigo-500 ${
+                              homeworkStatus.type === 'complete' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                              homeworkStatus.type === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                              'bg-red-50 text-red-700 border-red-200'
+                            }`}
+                          >
+                            <option value="">
+                              {homeworkStatus.text}
+                            </option>
+                            <option value="개별확인예정">📋 개별확인 예정</option>
+                            <option value="개별확인완료">✔️ 개별확인 완료</option>
+                          </select>
                         </td>
 
                         {/* 성적 */}
@@ -546,7 +610,7 @@ const StudentDashboard = ({ students = [] }) => {
                                 <p className="text-sm text-gray-600">학부모: {student.parentPhone || '-'}</p>
                               </div>
 
-                              {/* 이번 주 출결 이력 */}
+                              {/* 이번 달 출결 이력 */}
                               <div className="bg-white rounded-lg p-4 shadow-sm">
                                 <h4 className="font-medium text-gray-700 mb-2">📅 {selectedMonth}월 출결</h4>
                                 <div className="flex gap-2">
@@ -633,10 +697,12 @@ const StudentDashboard = ({ students = [] }) => {
       <div className="bg-white rounded-xl shadow p-4">
         <h4 className="text-sm font-medium text-gray-700 mb-2">💡 사용 방법</h4>
         <ul className="text-xs text-gray-500 space-y-1">
-          <li>• <strong>출결</strong>: 드롭다운을 클릭해서 바로 변경 가능</li>
-          <li>• <strong>메모</strong>: 셀을 클릭하거나 수정 버튼으로 편집</li>
+          <li>• <strong>출결</strong>: 드롭다운을 클릭해서 바로 변경 → 출석 관리에도 반영됨</li>
+          <li>• <strong>과제</strong>: 드롭다운으로 "개별확인 예정/완료" 선택 가능 → 숙제 관리에도 반영됨</li>
+          <li>• <strong>커리큘럼</strong>: 커리큘럼 탭에서 배정된 내용 표시</li>
+          <li>• <strong>성적</strong>: 성적 통계 탭의 해당 월/주차 점수 표시</li>
+          <li>• <strong>메모</strong>: 셀을 클릭하거나 ✏️ 버튼으로 편집 → 학생 관리에도 반영됨</li>
           <li>• <strong>▼ 버튼</strong>: 클릭하면 학생 상세 정보 확인</li>
-          <li>• <strong>월/주차</strong>: 상단 필터로 기간 변경</li>
         </ul>
       </div>
     </div>
