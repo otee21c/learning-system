@@ -1,9 +1,10 @@
 import React from 'react';
-import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search, ClipboardList } from 'lucide-react';
+import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search, ClipboardList, LayoutDashboard } from 'lucide-react';
 
 export default function Navigation({ currentUser, activeTab, setActiveTab }) {
   // 관리자 탭 메뉴
   const adminTabs = [
+    { id: 'dashboard', label: '대시보드', icon: LayoutDashboard },
     { id: 'students', label: '학생 관리', icon: User },
     { id: 'exams', label: '시험 관리', icon: FileText },
     { id: 'videos', label: '동영상 관리', icon: Video },

@@ -9,6 +9,7 @@ import LoginForm from './components/auth/LoginForm';
 
 // Admin Components
 import StudentManager from './components/admin/StudentManager';
+import StudentDashboard from './components/admin/StudentDashboard';
 import ExamManager from './components/admin/ExamManager';
 import VideoManager from './components/admin/VideoManager';
 import OMRBatchGrading from './components/admin/OMRBatchGrading';
@@ -20,6 +21,7 @@ import CurriculumManager from './components/admin/CurriculumManager';
 import AttendanceManager from './components/admin/AttendanceManager';
 import ProblemSolver from './components/admin/ProblemSolver';
 import ReportGenerator from './components/admin/ReportGenerator';
+import { Home } from 'lucide-react';
 
 // Student Components
 import ExamTaking from './components/student/ExamTaking';
@@ -33,7 +35,7 @@ import Navigation from './components/common/Navigation';
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('students');
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   // 전역 데이터 (모든 컴포넌트에서 필요한 것만)
   const [students, setStudents] = useState([]);
@@ -66,7 +68,7 @@ export default function App() {
         } else {
           if (email === 'admin@test.com') {
             setCurrentUser({ type: 'admin', name: '관리자' });
-            setActiveTab('students'); // 관리자는 학생 관리 탭으로
+            setActiveTab('dashboard'); // 관리자는 대시보드 탭으로
           } else {
             await signOut(auth);
             setCurrentUser(null);
@@ -130,7 +132,7 @@ export default function App() {
   const handleLogout = async () => {
     await signOut(auth);
     setCurrentUser(null);
-    setActiveTab('students');
+    setActiveTab('dashboard');
   };
 
   if (loading) {
@@ -162,12 +164,21 @@ export default function App() {
                 {currentUser.name}님, 환영합니다!
               </p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all font-medium"
-            >
-              로그아웃
-            </button>
+            <div className="flex gap-3">
+              <a
+                href="/"
+                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl hover:shadow-lg transition-all font-medium"
+              >
+                <Home size={18} />
+                홈페이지
+              </a>
+              <button
+                onClick={handleLogout}
+                className="px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all font-medium"
+              >
+                로그아웃
+              </button>
+            </div>
           </div>
         </div>
 
@@ -183,6 +194,7 @@ export default function App() {
           {/* 관리자 탭 */}
           {currentUser.type === 'admin' && (
             <>
+              {activeTab === 'dashboard' && <StudentDashboard students={students} />}
               {activeTab === 'students' && <StudentManager students={students} />}
               {activeTab === 'exams' && <ExamManager exams={exams} students={students} />}
               {activeTab === 'videos' && <VideoManager videos={videos} />}
