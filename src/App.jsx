@@ -21,6 +21,7 @@ import CurriculumManager from './components/admin/CurriculumManager';
 import AttendanceManager from './components/admin/AttendanceManager';
 import ProblemSolver from './components/admin/ProblemSolver';
 import ReportGenerator from './components/admin/ReportGenerator';
+import LearningMaterialManager from './components/admin/LearningMaterialManager';
 import { Home } from 'lucide-react';
 
 // Student Components
@@ -28,6 +29,7 @@ import ExamTaking from './components/student/ExamTaking';
 import MyGrades from './components/student/MyGrades';
 import HomeworkSubmission from './components/student/HomeworkSubmission';
 import ProblemAnalysis from './components/student/ProblemAnalysis';
+import QuestionFeedback from './components/student/QuestionFeedback';
 
 // Common
 import Navigation from './components/common/Navigation';
@@ -207,6 +209,7 @@ export default function App() {
               {activeTab === 'attendance' && <AttendanceManager students={students} />}
               {activeTab === 'report' && <ReportGenerator students={students} />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
+              {activeTab === 'learning-materials' && <LearningMaterialManager />}
             </>
           )}
 
@@ -216,6 +219,7 @@ export default function App() {
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
               {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
               {activeTab === 'problem' && <ProblemAnalysis currentUser={currentUser} problemAnalysisList={problemAnalysisList} />}
+              {activeTab === 'question' && <QuestionFeedback currentUser={currentUser} />}
               {activeTab === 'mypage' && <MyGrades currentUser={currentUser} />}
             </>
           )}
