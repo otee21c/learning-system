@@ -85,7 +85,7 @@ const StudentDashboard = ({ students = [] }) => {
       c.month === selectedMonth && 
       c.weekNumber === selectedWeek  // weekNumber 필드 사용
     );
-    return record?.title || '-';
+    return record ? true : false;  // 있으면 true, 없으면 false
   };
 
   // 학생별 숙제 현황 가져오기
@@ -411,10 +411,10 @@ const StudentDashboard = ({ students = [] }) => {
                     출결
                   </div>
                 </th>
-                <th className="px-4 py-4 text-left text-sm font-semibold text-gray-700">
-                  <div className="flex items-center gap-2">
+                <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-24">
+                  <div className="flex items-center justify-center gap-2">
                     <Calendar size={16} />
-                    커리큘럼
+                    커리
                   </div>
                 </th>
                 <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-40">
@@ -504,10 +504,16 @@ const StudentDashboard = ({ students = [] }) => {
                         </td>
 
                         {/* 커리큘럼 */}
-                        <td className="px-4 py-3">
-                          <span className={`text-sm ${curriculum === '-' ? 'text-gray-400' : 'text-gray-700'}`}>
-                            {curriculum}
-                          </span>
+                        <td className="px-4 py-3 text-center">
+                          {curriculum ? (
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 font-bold">
+                              O
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 font-bold">
+                              X
+                            </span>
+                          )}
                         </td>
 
                         {/* 과제 (수동 변경 가능!) */}
@@ -699,7 +705,7 @@ const StudentDashboard = ({ students = [] }) => {
         <ul className="text-xs text-gray-500 space-y-1">
           <li>• <strong>출결</strong>: 드롭다운을 클릭해서 바로 변경 → 출석 관리에도 반영됨</li>
           <li>• <strong>과제</strong>: 드롭다운으로 "개별확인 예정/완료" 선택 가능 → 숙제 관리에도 반영됨</li>
-          <li>• <strong>커리큘럼</strong>: 커리큘럼 탭에서 배정된 내용 표시</li>
+          <li>• <strong>커리</strong>: 커리큘럼 배정 여부 (O: 배정됨, X: 미배정) - 상세 내용은 커리큘럼 탭에서 확인</li>
           <li>• <strong>성적</strong>: 성적 통계 탭의 해당 월/주차 점수 표시</li>
           <li>• <strong>메모</strong>: 셀을 클릭하거나 ✏️ 버튼으로 편집 → 학생 관리에도 반영됨</li>
           <li>• <strong>▼ 버튼</strong>: 클릭하면 학생 상세 정보 확인</li>
