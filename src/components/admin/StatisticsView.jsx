@@ -108,18 +108,11 @@ export default function StatisticsView({ students, exams }) {
   // 수정 시작
   const handleEditStart = (student, examIndex) => {
     const exam = student.exams[examIndex];
-    // 원본 students 배열에서 해당 시험의 실제 인덱스 찾기
-    const originalStudent = students.find(s => s.id === student.id);
-    const originalExamIndex = originalStudent.exams?.findIndex(e => 
-      e.examTitle === exam.examTitle && 
-      e.date === exam.date &&
-      e.totalScore === exam.totalScore
-    );
     
     setEditingExam({
       studentId: student.id,
-      examIndex: originalExamIndex,
-      filteredIndex: examIndex
+      filteredIndex: examIndex,
+      originalExam: exam // 원본 시험 데이터 저장
     });
     setEditForm({
       examTitle: exam.examTitle || '',
@@ -134,16 +127,33 @@ export default function StatisticsView({ students, exams }) {
     
     try {
       const student = students.find(s => s.id === editingExam.studentId);
-      if (!student || !student.exams) return;
+      if (!student || !student.exams) {
+        alert('학생 정보를 찾을 수 없습니다.');
+        return;
+      }
       
-      const updatedExams = [...student.exams];
-      updatedExams[editingExam.examIndex] = {
-        ...updatedExams[editingExam.examIndex],
-        examTitle: editForm.examTitle,
-        totalScore: parseInt(editForm.totalScore) || 0,
-        percentage: editForm.percentage,
-        modifiedAt: new Date().toISOString()
-      };
+      const originalExam = editingExam.originalExam;
+      
+      // 수정할 시험 찾아서 업데이트
+      const updatedExams = student.exams.map(e => {
+        const isSameExam = 
+          e.examTitle === originalExam.examTitle &&
+          e.totalScore === originalExam.totalScore &&
+          e.date === originalExam.date &&
+          e.month === originalExam.month &&
+          e.week === originalExam.week;
+        
+        if (isSameExam) {
+          return {
+            ...e,
+            examTitle: editForm.examTitle,
+            totalScore: parseInt(editForm.totalScore) || 0,
+            percentage: editForm.percentage,
+            modifiedAt: new Date().toISOString()
+          };
+        }
+        return e;
+      });
       
       await updateDoc(doc(db, 'students', editingExam.studentId), {
         exams: updatedExams
@@ -158,7 +168,7 @@ export default function StatisticsView({ students, exams }) {
       
     } catch (error) {
       console.error('성적 수정 실패:', error);
-      alert('성적 수정에 실패했습니다.');
+      alert('성적 수정에 실패했습니다: ' + error.message);
     }
   };
 
@@ -171,18 +181,12 @@ export default function StatisticsView({ students, exams }) {
   // 삭제 확인
   const handleDeleteConfirm = (student, examIndex) => {
     const exam = student.exams[examIndex];
-    const originalStudent = students.find(s => s.id === student.id);
-    const originalExamIndex = originalStudent.exams?.findIndex(e => 
-      e.examTitle === exam.examTitle && 
-      e.date === exam.date &&
-      e.totalScore === exam.totalScore
-    );
     
     setDeleteConfirm({
       studentId: student.id,
       studentName: student.name,
-      examIndex: originalExamIndex,
-      examTitle: exam.examTitle
+      exam: exam, // 시험 데이터 전체 저장
+      examTitle: exam.examTitle || '시험'
     });
   };
 
@@ -192,9 +196,29 @@ export default function StatisticsView({ students, exams }) {
     
     try {
       const student = students.find(s => s.id === deleteConfirm.studentId);
-      if (!student || !student.exams) return;
+      if (!student || !student.exams) {
+        alert('학생 정보를 찾을 수 없습니다.');
+        return;
+      }
       
-      const updatedExams = student.exams.filter((_, idx) => idx !== deleteConfirm.examIndex);
+      // 삭제할 시험을 더 정확하게 찾기
+      const examToDelete = deleteConfirm.exam;
+      const updatedExams = student.exams.filter(e => {
+        // 모든 필드가 일치하는 시험만 제외
+        const isSameExam = 
+          e.examTitle === examToDelete.examTitle &&
+          e.totalScore === examToDelete.totalScore &&
+          e.date === examToDelete.date &&
+          e.month === examToDelete.month &&
+          e.week === examToDelete.week;
+        return !isSameExam;
+      });
+      
+      // 실제로 삭제되었는지 확인
+      if (updatedExams.length === student.exams.length) {
+        alert('삭제할 시험을 찾을 수 없습니다.');
+        return;
+      }
       
       await updateDoc(doc(db, 'students', deleteConfirm.studentId), {
         exams: updatedExams
@@ -208,7 +232,7 @@ export default function StatisticsView({ students, exams }) {
       
     } catch (error) {
       console.error('성적 삭제 실패:', error);
-      alert('성적 삭제에 실패했습니다.');
+      alert('성적 삭제에 실패했습니다: ' + error.message);
     }
   };
 
