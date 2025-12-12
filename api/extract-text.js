@@ -60,20 +60,20 @@ ${chapter ? `단원: ${chapter}` : ''}
       ]
     });
 
-    const options = {
-      hostname: 'api.anthropic.com',
-      port: 443,
-      path: '/v1/messages',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Length': Buffer.byteLength(requestBody)
-      }
-    };
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.anthropic.com',
+        port: 443,
+        path: '/v1/messages',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Length': Buffer.byteLength(requestBody)
+        }
+      };
 
-    const apiResponse = await new Promise((resolve, reject) => {
       const request = https.request(options, (response) => {
         let data = '';
         response.on('data', (chunk) => { data += chunk; });
@@ -81,19 +81,20 @@ ${chapter ? `단원: ${chapter}` : ''}
           resolve({ status: response.statusCode, data: data });
         });
       });
+      
       request.on('error', reject);
       request.write(requestBody);
       request.end();
     });
 
-    if (apiResponse.status !== 200) {
-      const errorData = JSON.parse(apiResponse.data);
-      return res.status(apiResponse.status).json({ 
+    if (result.status !== 200) {
+      const errorData = JSON.parse(result.data);
+      return res.status(result.status).json({ 
         error: errorData.error?.message || 'API 호출 실패' 
       });
     }
 
-    const data = JSON.parse(apiResponse.data);
+    const data = JSON.parse(result.data);
     const extractedText = data.content[0].text;
 
     return res.status(200).json({ extractedText });

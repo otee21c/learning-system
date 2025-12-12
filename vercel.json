@@ -1,18 +1,8 @@
 {
-  "functions": {
-    "api/*.cjs": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
   "rewrites": [
     {
-      "source": "/api/extract-text",
-      "destination": "/api/extract-text.cjs"
-    },
-    {
-      "source": "/api/question-feedback",
-      "destination": "/api/question-feedback.cjs"
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }

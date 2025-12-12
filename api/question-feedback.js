@@ -1,6 +1,6 @@
 const https = require('https');
 
-function callAnthropicAPI(apiKey, body) {
+function callAPI(apiKey, body) {
   return new Promise((resolve, reject) => {
     const requestBody = JSON.stringify(body);
     
@@ -63,7 +63,7 @@ module.exports = async function handler(req, res) {
 
     // 이미지 질문인 경우 먼저 질문 내용 추출
     if (imageBase64) {
-      const extractResponse = await callAnthropicAPI(apiKey, {
+      const extractResult = await callAPI(apiKey, {
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
         messages: [
@@ -87,12 +87,12 @@ module.exports = async function handler(req, res) {
         ]
       });
 
-      if (extractResponse.status !== 200) {
-        const errorData = JSON.parse(extractResponse.data);
+      if (extractResult.status !== 200) {
+        const errorData = JSON.parse(extractResult.data);
         throw new Error(errorData.error?.message || '이미지 질문 추출 실패');
       }
 
-      const extractData = JSON.parse(extractResponse.data);
+      const extractData = JSON.parse(extractResult.data);
       extractedQuestion = extractData.content[0].text;
       finalQuestion = extractedQuestion;
     }
@@ -111,7 +111,7 @@ ${material?.extractedText || '자료 없음'}
 ---
 학습 자료를 바탕으로 친절하고 이해하기 쉽게 설명해주세요.`;
 
-    const response = await callAnthropicAPI(apiKey, {
+    const result = await callAPI(apiKey, {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       system: systemPrompt,
@@ -123,14 +123,14 @@ ${material?.extractedText || '자료 없음'}
       ]
     });
 
-    if (response.status !== 200) {
-      const errorData = JSON.parse(response.data);
-      return res.status(response.status).json({ 
+    if (result.status !== 200) {
+      const errorData = JSON.parse(result.data);
+      return res.status(result.status).json({ 
         error: errorData.error?.message || 'API 호출 실패' 
       });
     }
 
-    const data = JSON.parse(response.data);
+    const data = JSON.parse(result.data);
     const answer = data.content[0].text;
 
     return res.status(200).json({ 
