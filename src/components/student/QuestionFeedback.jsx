@@ -131,17 +131,12 @@ const QuestionFeedback = ({ currentUser }) => {
       return;
     }
     
-    if (!import.meta.env.VITE_ANTHROPIC_API_KEY) {
-      alert('API 키가 설정되지 않았습니다.\n선생님께 문의해주세요.');
-      return;
-    }
-    
     setLoading(true);
     setAnswer('');
     
     try {
-      let finalQuestion = questionText;
       let questionImageUrl = null;
+      let imageBase64 = null;
       
       // 이미지 질문인 경우
       if (questionType === 'image' && questionImage) {
@@ -153,100 +148,41 @@ const QuestionFeedback = ({ currentUser }) => {
         questionImageUrl = await getDownloadURL(storageRef);
         
         // 이미지를 base64로 변환
-        const base64 = await new Promise((resolve) => {
+        imageBase64 = await new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(',')[1]);
           reader.readAsDataURL(questionImage);
         });
-        
-        // 먼저 이미지에서 질문 내용 추출
-        const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true'
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'image',
-                    source: {
-                      type: 'base64',
-                      media_type: questionImage.type,
-                      data: base64
-                    }
-                  },
-                  {
-                    type: 'text',
-                    text: '이 이미지에서 학생이 질문하는 내용을 추출해주세요. 손글씨로 쓴 질문이 있다면 그 내용을 읽어주세요. 문제나 지문이 있다면 어떤 문제에 대한 질문인지도 파악해주세요.'
-                  }
-                ]
-              }
-            ]
-          })
-        });
-        
-        const extractData = await extractResponse.json();
-        finalQuestion = extractData.content[0].text;
       }
       
-      // 학습 자료 기반 답변 생성
-      const systemPrompt = `당신은 국어 과목 전문 학습 도우미입니다. 
-학생이 질문하면 제공된 학습 자료를 바탕으로 친절하고 이해하기 쉽게 설명해주세요.
-
-[학습 자료 정보]
-- 교재: ${selectedMaterial.bookName}
-- 단원: ${selectedMaterial.chapter || '전체'}
-- 학년: ${selectedMaterial.grade}
-- 과정: ${selectedMaterial.course}
-
-[학습 자료 내용]
-${selectedMaterial.extractedText}
-
----
-
-답변 원칙:
-1. 먼저 학습 자료에 있는 내용을 바탕으로 설명하세요.
-2. 자료에 직접적인 답이 없다면, 관련 개념을 활용해 설명하세요.
-3. 필요한 경우 추가적인 국어 개념을 덧붙여 설명할 수 있습니다.
-4. 학생 수준에 맞게 쉽게 설명하세요.
-5. 예시를 들어 설명하면 더 좋습니다.`;
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      // 서버리스 함수 호출
+      const response = await fetch('/api/question-feedback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          system: systemPrompt,
-          messages: [
-            {
-              role: 'user',
-              content: finalQuestion
-            }
-          ]
+          question: questionText,
+          material: {
+            bookName: selectedMaterial.bookName,
+            chapter: selectedMaterial.chapter,
+            grade: selectedMaterial.grade,
+            course: selectedMaterial.course,
+            extractedText: selectedMaterial.extractedText
+          },
+          imageBase64: imageBase64,
+          mediaType: questionImage?.type
         })
       });
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error?.message || 'API 호출 실패');
+        throw new Error(errorData.error || 'API 호출 실패');
       }
       
       const data = await response.json();
-      const answerText = data.content[0].text;
+      const answerText = data.answer;
+      const finalQuestion = data.extractedQuestion || questionText;
       
       setAnswer(answerText);
       

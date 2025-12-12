@@ -160,13 +160,8 @@ const LearningMaterialManager = () => {
     setUploading(false);
   };
 
-  // 텍스트 추출 (Claude Vision API)
+  // 텍스트 추출 (서버리스 함수 호출)
   const handleExtractText = async (material) => {
-    if (!import.meta.env.VITE_ANTHROPIC_API_KEY) {
-      alert('Anthropic API 키가 설정되지 않았습니다.\n.env 파일에 VITE_ANTHROPIC_API_KEY를 추가해주세요.');
-      return;
-    }
-    
     setExtractionStatus(prev => ({ ...prev, [material.id]: 'extracting' }));
     setExtracting(true);
     
@@ -181,58 +176,27 @@ const LearningMaterialManager = () => {
         reader.readAsDataURL(blob);
       });
       
-      // Claude API 호출
-      const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      // 서버리스 함수 호출
+      const apiResponse = await fetch('/api/extract-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: material.fileType === 'application/pdf' ? 'image/png' : material.fileType,
-                    data: base64
-                  }
-                },
-                {
-                  type: 'text',
-                  text: `이 학습 자료의 내용을 정확하게 텍스트로 추출해주세요.
-
-교재명: ${material.bookName}
-${material.chapter ? `단원: ${material.chapter}` : ''}
-
-다음 형식으로 정리해주세요:
-1. 본문 내용 (지문, 설명 등)
-2. 문제가 있다면 문제 번호와 내용
-3. 보기/선택지가 있다면 번호와 함께
-4. 핵심 개념이나 용어 정리
-
-가능한 원문 그대로 추출하되, 학생이 질문할 때 참고할 수 있도록 구조화해주세요.`
-                }
-              ]
-            }
-          ]
+          imageBase64: base64,
+          mediaType: material.fileType === 'application/pdf' ? 'image/png' : material.fileType,
+          bookName: material.bookName,
+          chapter: material.chapter
         })
       });
       
       if (!apiResponse.ok) {
         const errorData = await apiResponse.json();
-        throw new Error(errorData.error?.message || 'API 호출 실패');
+        throw new Error(errorData.error || 'API 호출 실패');
       }
       
       const data = await apiResponse.json();
-      const extractedText = data.content[0].text;
+      const extractedText = data.extractedText;
       
       // DB 업데이트
       await updateDoc(doc(db, 'learningMaterials', material.id), {
