@@ -8,6 +8,7 @@ import {
   orderBy,
   serverTimestamp,
   deleteDoc,
+  updateDoc,
   doc
 } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -129,6 +130,45 @@ const HomeworkManager = () => {
         console.error('삭제 실패:', error);
         alert('삭제에 실패했습니다.');
       }
+  };
+
+  // 수동으로 과제 상태 변경 (개별 확인 예정/완료)
+  const handleManualStatusChange = async (studentId, studentName, status) => {
+    if (!selectedAssignment) return;
+
+    try {
+      // 해당 학생의 기존 제출 기록 찾기
+      const existingSubmission = submissions.find(sub => 
+        sub.studentId === studentId || sub.studentName === studentName
+      );
+
+      if (existingSubmission) {
+        // 기존 기록 업데이트
+        await updateDoc(doc(db, 'homeworkSubmissions', existingSubmission.id), {
+          manualStatus: status,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // 새 기록 생성
+        const { month, week } = getMonthWeek(selectedAssignment.dueDate);
+        await addDoc(collection(db, 'homeworkSubmissions'), {
+          homeworkId: selectedAssignment.id,
+          studentId: studentId,
+          studentName: studentName,
+          month: month,
+          week: week,
+          manualStatus: status,  // 수동 상태
+          submitted: false,
+          submittedAt: serverTimestamp()
+        });
+      }
+
+      // 목록 새로고침
+      loadSubmissions(selectedAssignment.id);
+    } catch (error) {
+      console.error('상태 변경 실패:', error);
+      alert('상태 변경에 실패했습니다.');
+    }
   };
 
   // 과제 생성
@@ -493,6 +533,7 @@ const HomeworkManager = () => {
                       <tr style={{ backgroundColor: '#f5f5f5' }}>
                         <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>학생 이름</th>
                         <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>제출 상태</th>
+                        <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>수동 상태</th>
                         <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>제출 시간</th>
                       </tr>
                       <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>
@@ -506,7 +547,21 @@ const HomeworkManager = () => {
                     </thead>
                     <tbody>
                       {students.map(student => {
-                        const submission = submissions.find(sub => sub.studentName === student.name);
+                        const submission = submissions.find(sub => sub.studentName === student.name || sub.studentId === student.id);
+                        const manualStatus = submission?.manualStatus || '';
+                        
+                        // 상태 결정: 수동 상태 > 제출 여부
+                        const getDisplayStatus = () => {
+                          if (manualStatus === '개별확인예정') return { text: '📋 개별확인 예정', color: '#f59e0b', bg: '#fef3c7' };
+                          if (manualStatus === '개별확인완료') return { text: '✔️ 개별확인 완료', color: '#10b981', bg: '#d1fae5' };
+                          if (submission && (submission.submitted || submission.imageUrl || submission.files)) {
+                            return { text: '✅ 제출', color: '#10b981', bg: '#d1fae5' };
+                          }
+                          return { text: '❌ 미제출', color: '#ef4444', bg: '#fee2e2' };
+                        };
+                        
+                        const displayStatus = getDisplayStatus();
+                        
                         return (
                           <tr key={student.id} style={{ borderBottom: '1px solid #eee' }}>
                             <td style={{ padding: '12px', textAlign: 'center' }}>
@@ -519,14 +574,37 @@ const HomeworkManager = () => {
                   </td>
                             <td style={{ padding: '12px' }}>{student.name}</td>
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              {submission ? (
-                                <span style={{ color: '#10b981', fontWeight: 'bold' }}>✅ 제출</span>
-                              ) : (
-                                <span style={{ color: '#ef4444', fontWeight: 'bold' }}>❌ 미제출</span>
-                              )}
+                              <span style={{ 
+                                color: displayStatus.color, 
+                                fontWeight: 'bold',
+                                backgroundColor: displayStatus.bg,
+                                padding: '4px 8px',
+                                borderRadius: '4px',
+                                fontSize: '13px'
+                              }}>
+                                {displayStatus.text}
+                              </span>
                             </td>
                             <td style={{ padding: '12px', textAlign: 'center' }}>
-                              {submission ? new Date(submission.submittedAt.seconds * 1000).toLocaleString('ko-KR') : '-'}
+                              <select
+                                value={manualStatus}
+                                onChange={(e) => handleManualStatusChange(student.id, student.name, e.target.value)}
+                                style={{
+                                  padding: '6px 10px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #ddd',
+                                  backgroundColor: manualStatus ? '#f0f9ff' : 'white',
+                                  cursor: 'pointer',
+                                  fontSize: '13px'
+                                }}
+                              >
+                                <option value="">선택</option>
+                                <option value="개별확인예정">📋 개별확인 예정</option>
+                                <option value="개별확인완료">✔️ 개별확인 완료</option>
+                              </select>
+                            </td>
+                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                              {submission?.submittedAt ? new Date(submission.submittedAt.seconds * 1000).toLocaleString('ko-KR') : '-'}
                             </td>
                           </tr>
                         );

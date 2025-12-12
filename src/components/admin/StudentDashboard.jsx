@@ -96,12 +96,19 @@ const StudentDashboard = ({ students = [] }) => {
       h.week === selectedWeek
     );
     
-    // 제출된 숙제 수
-    const submitted = submissions.filter(s => s.submitted || s.imageUrl).length;
+    // 개별확인완료 수
+    const manualComplete = submissions.filter(s => s.manualStatus === '개별확인완료').length;
+    // 개별확인예정 수
+    const manualPending = submissions.filter(s => s.manualStatus === '개별확인예정').length;
+    // 실제 제출 수
+    const submitted = submissions.filter(s => s.submitted || s.imageUrl || s.files).length;
     
-    // 전체 숙제 수 (assignments 컬렉션에서 가져와야 하지만, 간단히 3개로 가정)
-    // 나중에 필요하면 수정
-    return submitted > 0 ? `${submitted}개 제출` : '미제출';
+    // 총 완료 수 (제출 + 개별확인완료)
+    const totalComplete = submitted + manualComplete;
+    
+    if (manualPending > 0) return `확인예정 ${manualPending}개`;
+    if (totalComplete > 0) return `${totalComplete}개 완료`;
+    return '미제출';
   };
 
   // 학생별 최근 성적 가져오기
@@ -123,7 +130,7 @@ const StudentDashboard = ({ students = [] }) => {
       m.month === selectedMonth && 
       m.week === selectedWeek
     );
-    return record?.memo || '';
+    return record?.content || '';  // content 필드 사용 (StudentManager와 동일)
   };
 
   // 출결 상태 아이콘
@@ -146,8 +153,15 @@ const StudentDashboard = ({ students = [] }) => {
         a.week === selectedWeek
       );
 
+      // 오늘 날짜 (YYYY-MM-DD 형식)
+      const today = new Date().toISOString().split('T')[0];
+
       if (existing) {
-        await updateDoc(doc(db, 'attendance', existing.docId), { status: newStatus });
+        await updateDoc(doc(db, 'attendance', existing.docId), { 
+          status: newStatus,
+          date: existing.date || today, // 기존 date 유지 또는 오늘 날짜
+          timestamp: new Date()
+        });
       } else {
         const student = students.find(s => s.id === studentId);
         await addDoc(collection(db, 'attendance'), {
@@ -155,8 +169,10 @@ const StudentDashboard = ({ students = [] }) => {
           studentName: student?.name || '',
           month: selectedMonth,
           week: selectedWeek,
+          date: today, // 날짜 필드 추가
           status: newStatus,
-          date: new Date().toISOString()
+          note: '',
+          timestamp: new Date()
         });
       }
       loadAllData();
@@ -167,7 +183,7 @@ const StudentDashboard = ({ students = [] }) => {
   };
 
   // 메모 저장
-  const handleMemoSave = async (studentId, memo) => {
+  const handleMemoSave = async (studentId, memoContent) => {
     try {
       const existing = memoData.find(m => 
         m.studentId === studentId && 
@@ -176,7 +192,7 @@ const StudentDashboard = ({ students = [] }) => {
       );
 
       if (existing) {
-        await updateDoc(doc(db, 'studentMemos', existing.docId), { memo });
+        await updateDoc(doc(db, 'studentMemos', existing.docId), { content: memoContent });
       } else {
         const student = students.find(s => s.id === studentId);
         await addDoc(collection(db, 'studentMemos'), {
@@ -184,7 +200,7 @@ const StudentDashboard = ({ students = [] }) => {
           studentName: student?.name || '',
           month: selectedMonth,
           week: selectedWeek,
-          memo,
+          content: memoContent,  // content 필드 사용 (StudentManager와 동일)
           createdAt: new Date().toISOString()
         });
       }
@@ -441,7 +457,9 @@ const StudentDashboard = ({ students = [] }) => {
                         {/* 과제 */}
                         <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            homeworkStatus === '미제출' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                            homeworkStatus === '미제출' ? 'bg-red-100 text-red-700' : 
+                            homeworkStatus.includes('예정') ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
                           }`}>
                             {homeworkStatus}
                           </span>
@@ -558,7 +576,7 @@ const StudentDashboard = ({ students = [] }) => {
                                     .slice(0, 3)
                                     .map((m, idx) => (
                                       <p key={idx} className="text-xs text-gray-600">
-                                        <span className="text-gray-400">{m.month}월 {m.week}주:</span> {m.memo}
+                                        <span className="text-gray-400">{m.month}월 {m.week}주:</span> {m.content}
                                       </p>
                                     ))
                                   }
