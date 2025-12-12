@@ -10,7 +10,6 @@ const AttendanceManager = () => {
   const [todayAttendance, setTodayAttendance] = useState({});
   const [loading, setLoading] = useState(false);
 
-  // 학생 목록과 출석 기록 로드
   useEffect(() => {
     loadStudents();
   }, []);
@@ -56,14 +55,31 @@ const AttendanceManager = () => {
     }
   };
 
+  // 토글 기능: 같은 버튼 다시 누르면 선택 해제
   const handleStatusChange = (studentId, status) => {
-    setTodayAttendance(prev => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        status
+    setTodayAttendance(prev => {
+      const current = prev[studentId];
+      
+      // 같은 상태를 다시 클릭하면 선택 해제
+      if (current?.status === status) {
+        return {
+          ...prev,
+          [studentId]: {
+            ...current,
+            status: null  // 선택 해제
+          }
+        };
       }
-    }));
+      
+      // 다른 상태를 클릭하면 해당 상태로 변경
+      return {
+        ...prev,
+        [studentId]: {
+          ...current,
+          status
+        }
+      };
+    });
   };
 
   const handleNoteChange = (studentId, note) => {
@@ -81,7 +97,15 @@ const AttendanceManager = () => {
     try {
       for (const student of students) {
         const attendance = todayAttendance[student.id];
-        if (!attendance || !attendance.status) continue;
+        
+        // status가 null이거나 없으면 건너뛰기 (또는 기존 기록 삭제)
+        if (!attendance || !attendance.status) {
+          // 기존에 저장된 기록이 있으면 삭제
+          if (attendance?.id) {
+            await deleteDoc(doc(db, 'attendance', attendance.id));
+          }
+          continue;
+        }
 
         const { month, week } = getMonthWeek(selectedDate);
         
@@ -97,10 +121,8 @@ const AttendanceManager = () => {
         };
 
         if (attendance.id) {
-          // 기존 기록 수정
           await updateDoc(doc(db, 'attendance', attendance.id), attendanceData);
         } else {
-          // 새 기록 추가
           await addDoc(collection(db, 'attendance'), attendanceData);
         }
       }
@@ -111,16 +133,6 @@ const AttendanceManager = () => {
       alert('출석 저장에 실패했습니다.');
     }
     setLoading(false);
-  };
-
-  // 출석률 계산
-  const calculateAttendanceRate = (studentId) => {
-    // 전체 출석 기록에서 해당 학생의 기록만 필터링
-    const studentRecords = attendanceRecords.filter(r => r.studentId === studentId);
-    if (studentRecords.length === 0) return 0;
-    
-    const presentCount = studentRecords.filter(r => r.status === '출석').length;
-    return Math.round((presentCount / studentRecords.length) * 100);
   };
 
   const getStatusColor = (status) => {
@@ -180,6 +192,19 @@ const AttendanceManager = () => {
           <div style={{ marginLeft: 'auto', color: '#666' }}>
             총 {students.length}명
           </div>
+        </div>
+
+        {/* 안내 메시지 */}
+        <div style={{
+          padding: '12px 16px',
+          backgroundColor: '#f0fdf4',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          border: '1px solid #bbf7d0'
+        }}>
+          <p style={{ margin: 0, color: '#166534', fontSize: '14px' }}>
+            💡 <strong>팁:</strong> 같은 버튼을 다시 누르면 선택이 해제됩니다.
+          </p>
         </div>
 
         {/* 출석 체크 테이블 */}

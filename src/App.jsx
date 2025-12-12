@@ -29,7 +29,8 @@ import ExamTaking from './components/student/ExamTaking';
 import MyGrades from './components/student/MyGrades';
 import HomeworkSubmission from './components/student/HomeworkSubmission';
 import ProblemAnalysis from './components/student/ProblemAnalysis';
-import QuestionFeedback from './components/student/QuestionFeedback';
+import ConceptQuestion from './components/student/ConceptQuestion';
+import ProblemSolving from './components/student/ProblemSolving';
 
 // Common
 import Navigation from './components/common/Navigation';
@@ -222,7 +223,8 @@ export default function App() {
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
               {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
               {activeTab === 'problem' && <ProblemAnalysis currentUser={currentUser} problemAnalysisList={problemAnalysisList} />}
-              {activeTab === 'question' && <QuestionFeedback currentUser={currentUser} />}
+              {activeTab === 'concept-question' && <ConceptQuestion currentUser={currentUser} />}
+              {activeTab === 'problem-solving' && <ProblemSolving currentUser={currentUser} />}
               {activeTab === 'mypage' && <MyGrades currentUser={currentUser} />}
             </>
           )}

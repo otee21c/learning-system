@@ -1,5 +1,58 @@
 const https = require('https');
 
+// URL에서 이미지를 다운로드하여 base64로 변환
+function downloadImageAsBase64(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (response) => {
+      // 리다이렉트 처리
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        return downloadImageAsBase64(response.headers.location).then(resolve).catch(reject);
+      }
+      
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        const base64 = buffer.toString('base64');
+        const contentType = response.headers['content-type'] || 'image/png';
+        resolve({ base64, contentType });
+      });
+      response.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+function callAnthropicAPI(apiKey, body) {
+  return new Promise((resolve, reject) => {
+    const requestBody = JSON.stringify(body);
+    
+    const options = {
+      hostname: 'api.anthropic.com',
+      port: 443,
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Length': Buffer.byteLength(requestBody)
+      }
+    };
+
+    const request = https.request(options, (response) => {
+      let data = '';
+      response.on('data', (chunk) => { data += chunk; });
+      response.on('end', () => {
+        resolve({ status: response.statusCode, data: data });
+      });
+    });
+    
+    request.on('error', reject);
+    request.write(requestBody);
+    request.end();
+  });
+}
+
 module.exports = async function handler(req, res) {
   // CORS 헤더
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,11 +68,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { imageBase64, mediaType, bookName, chapter } = req.body || {};
-
-    if (!imageBase64) {
-      return res.status(400).json({ error: 'imageBase64 is required' });
-    }
+    const { imageUrl, imageBase64, mediaType, bookName, chapter } = req.body || {};
 
     const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY;
     
@@ -27,7 +76,30 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: 'API key not configured' });
     }
 
-    const requestBody = JSON.stringify({
+    let base64Data = imageBase64;
+    let contentType = mediaType || 'image/png';
+
+    // imageUrl이 제공된 경우 서버에서 직접 다운로드
+    if (imageUrl && !imageBase64) {
+      console.log('Downloading image from URL:', imageUrl.substring(0, 100) + '...');
+      const downloaded = await downloadImageAsBase64(imageUrl);
+      base64Data = downloaded.base64;
+      contentType = downloaded.contentType;
+      console.log('Image downloaded, content-type:', contentType);
+    }
+
+    if (!base64Data) {
+      return res.status(400).json({ error: 'imageUrl or imageBase64 is required' });
+    }
+
+    // PDF인 경우 처리 불가 안내
+    if (contentType === 'application/pdf') {
+      return res.status(400).json({ error: 'PDF는 현재 지원하지 않습니다. 이미지(JPG, PNG)로 변환 후 업로드해주세요.' });
+    }
+
+    console.log('Calling Anthropic API...');
+
+    const result = await callAnthropicAPI(apiKey, {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,
       messages: [
@@ -38,8 +110,8 @@ module.exports = async function handler(req, res) {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: mediaType || 'image/png',
-                data: imageBase64
+                media_type: contentType.startsWith('image/') ? contentType : 'image/png',
+                data: base64Data
               }
             },
             {
@@ -60,34 +132,8 @@ ${chapter ? `단원: ${chapter}` : ''}
       ]
     });
 
-    const result = await new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.anthropic.com',
-        port: 443,
-        path: '/v1/messages',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'Content-Length': Buffer.byteLength(requestBody)
-        }
-      };
-
-      const request = https.request(options, (response) => {
-        let data = '';
-        response.on('data', (chunk) => { data += chunk; });
-        response.on('end', () => {
-          resolve({ status: response.statusCode, data: data });
-        });
-      });
-      
-      request.on('error', reject);
-      request.write(requestBody);
-      request.end();
-    });
-
     if (result.status !== 200) {
+      console.error('API error:', result.data);
       const errorData = JSON.parse(result.data);
       return res.status(result.status).json({ 
         error: errorData.error?.message || 'API 호출 실패' 
@@ -97,6 +143,7 @@ ${chapter ? `단원: ${chapter}` : ''}
     const data = JSON.parse(result.data);
     const extractedText = data.content[0].text;
 
+    console.log('Text extraction successful');
     return res.status(200).json({ extractedText });
 
   } catch (error) {

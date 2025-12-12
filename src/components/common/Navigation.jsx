@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search, ClipboardList, LayoutDashboard, MessageCircle, FolderOpen } from 'lucide-react';
+import { User, FileText, Video, CheckCircle, BookOpen, Bell, Calendar, Users, BarChart3, Brain, Search, ClipboardList, LayoutDashboard, MessageCircle, FolderOpen, HelpCircle } from 'lucide-react';
 
 export default function Navigation({ currentUser, activeTab, setActiveTab }) {
   // 관리자 탭 메뉴
@@ -20,12 +20,13 @@ export default function Navigation({ currentUser, activeTab, setActiveTab }) {
     { id: 'learning-materials', label: '학습자료', icon: FolderOpen },
   ];
 
-  // 학생 탭 메뉴
+  // 학생 탭 메뉴 - 명칭 변경
   const studentTabs = [
     { id: 'exam', label: '시험 보기', icon: FileText },
     { id: 'homework', label: '숙제', icon: BookOpen },
     { id: 'problem', label: '문제 분석', icon: Search },
-    { id: 'question', label: '질문하기', icon: MessageCircle },
+    { id: 'concept-question', label: '개념과 지문', icon: MessageCircle },
+    { id: 'problem-solving', label: '문제 풀이', icon: HelpCircle },
     { id: 'mypage', label: '내 성적', icon: User },
   ];
 
