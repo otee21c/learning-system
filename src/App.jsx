@@ -93,7 +93,7 @@ export default function App() {
 
     // 학생 데이터
     const unsubStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, docId: doc.id }));
       if (data.length > 0) setStudents(data);
     });
 

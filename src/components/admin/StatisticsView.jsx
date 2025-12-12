@@ -111,6 +111,7 @@ export default function StatisticsView({ students, exams }) {
     
     setEditingExam({
       studentId: student.id,
+      studentDocId: student.docId, // Firebase 문서 ID
       filteredIndex: examIndex,
       originalExam: exam // 원본 시험 데이터 저장
     });
@@ -155,7 +156,9 @@ export default function StatisticsView({ students, exams }) {
         return e;
       });
       
-      await updateDoc(doc(db, 'students', editingExam.studentId), {
+      // docId 사용 (Firebase 문서 ID)
+      const docId = editingExam.studentDocId || student.docId || editingExam.studentId;
+      await updateDoc(doc(db, 'students', docId), {
         exams: updatedExams
       });
       
@@ -184,6 +187,7 @@ export default function StatisticsView({ students, exams }) {
     
     setDeleteConfirm({
       studentId: student.id,
+      studentDocId: student.docId, // Firebase 문서 ID
       studentName: student.name,
       exam: exam, // 시험 데이터 전체 저장
       examTitle: exam.examTitle || '시험'
@@ -220,7 +224,9 @@ export default function StatisticsView({ students, exams }) {
         return;
       }
       
-      await updateDoc(doc(db, 'students', deleteConfirm.studentId), {
+      // docId 사용 (Firebase 문서 ID)
+      const docId = deleteConfirm.studentDocId || student.docId || deleteConfirm.studentId;
+      await updateDoc(doc(db, 'students', docId), {
         exams: updatedExams
       });
       
