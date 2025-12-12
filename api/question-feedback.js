@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS 헤더 설정
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -22,11 +22,11 @@ export default async function handler(req, res) {
     }
 
     // 환경 변수에서 API 키 가져오기
-    const apiKey = process.env.VITE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY;
     
     if (!apiKey) {
-      console.error('API key not found');
-      return res.status(500).json({ error: 'API key not configured' });
+      console.error('API key not found in environment variables');
+      return res.status(500).json({ error: 'API key not configured. Please add ANTHROPIC_API_KEY to Vercel environment variables.' });
     }
 
     let finalQuestion = question;
@@ -34,6 +34,8 @@ export default async function handler(req, res) {
 
     // 이미지 질문인 경우 먼저 질문 내용 추출
     if (imageBase64) {
+      console.log('Extracting question from image...');
+      
       const extractResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -75,6 +77,8 @@ export default async function handler(req, res) {
       extractedQuestion = extractData.content[0].text;
       finalQuestion = extractedQuestion;
     }
+
+    console.log('Generating answer based on learning material...');
 
     // 학습 자료 기반 답변 생성
     const systemPrompt = `당신은 국어 과목 전문 학습 도우미입니다. 
@@ -130,6 +134,7 @@ ${material?.extractedText || '자료 없음'}
     const data = await response.json();
     const answer = data.content[0].text;
 
+    console.log('Answer generated successfully');
     return res.status(200).json({ 
       answer,
       extractedQuestion: extractedQuestion
@@ -139,4 +144,4 @@ ${material?.extractedText || '자료 없음'}
     console.error('Question feedback error:', error);
     return res.status(500).json({ error: error.message });
   }
-}
+};

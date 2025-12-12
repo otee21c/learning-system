@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS 헤더 설정
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -22,12 +22,14 @@ export default async function handler(req, res) {
     }
 
     // 환경 변수에서 API 키 가져오기
-    const apiKey = process.env.VITE_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY;
     
     if (!apiKey) {
-      console.error('API key not found');
-      return res.status(500).json({ error: 'API key not configured' });
+      console.error('API key not found in environment variables');
+      return res.status(500).json({ error: 'API key not configured. Please add ANTHROPIC_API_KEY to Vercel environment variables.' });
     }
+
+    console.log('Calling Anthropic API for text extraction...');
 
     // Anthropic API 호출
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -84,10 +86,11 @@ ${chapter ? `단원: ${chapter}` : ''}
     const data = await response.json();
     const extractedText = data.content[0].text;
 
+    console.log('Text extraction successful');
     return res.status(200).json({ extractedText });
 
   } catch (error) {
     console.error('Extract text error:', error);
     return res.status(500).json({ error: error.message });
   }
-}
+};
