@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, query, where, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { 
@@ -46,16 +46,24 @@ const ConceptQuestion = ({ currentUser }) => {
 
   const loadQuestionHistory = async () => {
     try {
+      // where만 사용하고 orderBy는 클라이언트에서 처리 (인덱스 불필요)
       const q = query(
         collection(db, 'conceptQuestions'),
-        where('studentId', '==', currentUser.id),
-        orderBy('createdAt', 'desc')
+        where('studentId', '==', currentUser.id)
       );
       const snapshot = await getDocs(q);
-      const history = snapshot.docs.map(doc => ({
+      let history = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      // 클라이언트에서 최신순 정렬
+      history.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
       setQuestionHistory(history);
 
       // 이번 주 질문 횟수 계산
@@ -70,6 +78,10 @@ const ConceptQuestion = ({ currentUser }) => {
       setCanAsk(weeklyQuestions.length < WEEKLY_LIMIT);
     } catch (error) {
       console.error('질문 이력 로드 실패:', error);
+      // 에러가 발생해도 빈 배열로 설정
+      setQuestionHistory([]);
+      setWeeklyCount(0);
+      setCanAsk(true);
     }
   };
 
@@ -173,7 +185,7 @@ const ConceptQuestion = ({ currentUser }) => {
       });
       
       // 이력 새로고침
-      loadQuestionHistory();
+      await loadQuestionHistory();
       
     } catch (error) {
       console.error('질문 처리 실패:', error);
@@ -205,7 +217,7 @@ const ConceptQuestion = ({ currentUser }) => {
                 개념과 지문
               </h2>
               <p className="text-sm text-gray-500">
-                문법 개념, 작품 해설, 지문 해석에 대해 질문하세요
+                국어 개념, 작품 해설, 지문 해석에 대해 질문하세요
               </p>
             </div>
           </div>
@@ -397,16 +409,16 @@ const ConceptQuestion = ({ currentUser }) => {
                 <div key={item.id} className="border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs text-gray-400">
-                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || ''}
+                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
                     </span>
                   </div>
                   
                   <p className="text-sm font-medium text-gray-900 mb-2">
-                    Q: {item.question?.substring(0, 100)}{item.question?.length > 100 ? '...' : ''}
+                    Q: {item.question?.substring(0, 100) || '질문 내용 없음'}{item.question?.length > 100 ? '...' : ''}
                   </p>
                   
                   <p className="text-sm text-gray-600">
-                    A: {item.answer?.substring(0, 150)}{item.answer?.length > 150 ? '...' : ''}
+                    A: {item.answer?.substring(0, 150) || '답변 없음'}{item.answer?.length > 150 ? '...' : ''}
                   </p>
                 </div>
               ))}
@@ -419,7 +431,7 @@ const ConceptQuestion = ({ currentUser }) => {
       <div className="bg-blue-50 rounded-xl p-4">
         <h4 className="font-medium text-blue-800 mb-2">💡 이런 질문을 할 수 있어요</h4>
         <ul className="text-sm text-blue-700 space-y-1">
-          <li>• 문법 개념: "역설법이 뭐예요?", "서술자 시점 종류 알려주세요"</li>
+          <li>• 국어 개념: "역설법이 뭐예요?", "서술자 시점 종류 알려주세요"</li>
           <li>• 작품 해설: "청산별곡의 주제가 뭔가요?"</li>
           <li>• 지문 해석: 교재 사진을 찍어서 질문하세요</li>
           <li>• 주 3회까지 질문할 수 있어요</li>

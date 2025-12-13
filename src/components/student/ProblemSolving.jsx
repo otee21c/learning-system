@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, addDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { 
@@ -57,15 +57,20 @@ const ProblemSolving = ({ currentUser }) => {
   const loadMaterials = async () => {
     setLoadingMaterials(true);
     try {
-      const q = query(
-        collection(db, 'learningMaterials'),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const materialList = snapshot.docs.map(doc => ({
+      // orderBy 없이 조회 후 클라이언트에서 정렬
+      const snapshot = await getDocs(collection(db, 'learningMaterials'));
+      let materialList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      // 클라이언트에서 최신순 정렬
+      materialList.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
       setMaterials(materialList);
     } catch (error) {
       console.error('학습 자료 로드 실패:', error);
@@ -75,16 +80,24 @@ const ProblemSolving = ({ currentUser }) => {
 
   const loadQuestionHistory = async () => {
     try {
+      // where만 사용하고 orderBy는 클라이언트에서 처리 (인덱스 불필요)
       const q = query(
         collection(db, 'problemQuestions'),
-        where('studentId', '==', currentUser.id),
-        orderBy('createdAt', 'desc')
+        where('studentId', '==', currentUser.id)
       );
       const snapshot = await getDocs(q);
-      const history = snapshot.docs.map(doc => ({
+      let history = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      // 클라이언트에서 최신순 정렬
+      history.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
       setQuestionHistory(history);
 
       // 이번 주 질문 횟수 계산
@@ -99,6 +112,10 @@ const ProblemSolving = ({ currentUser }) => {
       setCanAsk(weeklyQuestions.length < WEEKLY_LIMIT);
     } catch (error) {
       console.error('질문 이력 로드 실패:', error);
+      // 에러가 발생해도 빈 배열로 설정
+      setQuestionHistory([]);
+      setWeeklyCount(0);
+      setCanAsk(true);
     }
   };
 
@@ -214,7 +231,8 @@ const ProblemSolving = ({ currentUser }) => {
         createdAt: serverTimestamp()
       });
       
-      loadQuestionHistory();
+      // 이력 새로고침
+      await loadQuestionHistory();
       
     } catch (error) {
       console.error('질문 처리 실패:', error);
@@ -488,19 +506,19 @@ const ProblemSolving = ({ currentUser }) => {
                 <div key={item.id} className="border rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-medium rounded">
-                      {item.materialName}
+                      {item.materialName || '교재 없음'}
                     </span>
                     <span className="text-xs text-gray-400">
-                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || ''}
+                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
                     </span>
                   </div>
                   
                   <p className="text-sm font-medium text-gray-900 mb-2">
-                    Q: {item.question?.substring(0, 100)}{item.question?.length > 100 ? '...' : ''}
+                    Q: {item.question?.substring(0, 100) || '질문 내용 없음'}{item.question?.length > 100 ? '...' : ''}
                   </p>
                   
                   <p className="text-sm text-gray-600">
-                    A: {item.answer?.substring(0, 150)}{item.answer?.length > 150 ? '...' : ''}
+                    A: {item.answer?.substring(0, 150) || '답변 없음'}{item.answer?.length > 150 ? '...' : ''}
                   </p>
                 </div>
               ))}

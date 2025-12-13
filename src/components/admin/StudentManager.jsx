@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp, Camera, Image } from 'lucide-react';
+import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp, Camera, Image, RotateCcw } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, query, where, orderBy } from 'firebase/firestore';
 import { db, auth, storage } from '../../firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -428,6 +428,56 @@ export default function StudentManager({ students }) {
     } catch (error) {
       console.error('메모 삭제 실패:', error);
       alert('메모 삭제에 실패했습니다.');
+    }
+  };
+
+  // 질문 횟수 초기화
+  const handleResetQuestionCount = async (student) => {
+    if (!confirm(`${student.name} 학생의 이번 주 질문 횟수를 초기화하시겠습니까?\n(개념과 지문, 문제 풀이 모두 초기화됩니다)`)) return;
+
+    try {
+      // 이번 주 시작일 계산
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+      const weekStart = new Date(now);
+      weekStart.setDate(diff);
+      weekStart.setHours(0, 0, 0, 0);
+
+      // 개념과 지문 질문 삭제
+      const conceptQuery = query(
+        collection(db, 'conceptQuestions'),
+        where('studentId', '==', student.id)
+      );
+      const conceptSnapshot = await getDocs(conceptQuery);
+      
+      for (const docSnap of conceptSnapshot.docs) {
+        const data = docSnap.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || 0);
+        if (createdAt >= weekStart) {
+          await deleteDoc(doc(db, 'conceptQuestions', docSnap.id));
+        }
+      }
+
+      // 문제 풀이 질문 삭제
+      const problemQuery = query(
+        collection(db, 'problemQuestions'),
+        where('studentId', '==', student.id)
+      );
+      const problemSnapshot = await getDocs(problemQuery);
+      
+      for (const docSnap of problemSnapshot.docs) {
+        const data = docSnap.data();
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt || 0);
+        if (createdAt >= weekStart) {
+          await deleteDoc(doc(db, 'problemQuestions', docSnap.id));
+        }
+      }
+
+      alert(`${student.name} 학생의 질문 횟수가 초기화되었습니다.`);
+    } catch (error) {
+      console.error('질문 횟수 초기화 실패:', error);
+      alert('질문 횟수 초기화에 실패했습니다.');
     }
   };
 
@@ -870,6 +920,13 @@ export default function StudentManager({ students }) {
                             title="이미지 저장"
                           >
                             <Camera size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleResetQuestionCount(student)}
+                            className="p-2 bg-orange-100 text-orange-600 rounded-lg hover:bg-orange-200 transition"
+                            title="질문 횟수 초기화"
+                          >
+                            <RotateCcw size={16} />
                           </button>
                           <button
                             onClick={() => setEditingStudent(student)}
