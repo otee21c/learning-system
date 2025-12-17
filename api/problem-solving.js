@@ -31,12 +31,16 @@ function callAPI(apiKey, body) {
   });
 }
 
-// URL에서 이미지를 다운로드하여 base64로 변환
-function downloadImageAsBase64(url) {
+// URL에서 파일을 다운로드하여 base64로 변환 (이미지, PDF 모두 지원)
+function downloadFileAsBase64(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, (response) => {
+    const urlObj = new URL(url);
+    const protocol = urlObj.protocol === 'https:' ? https : require('http');
+    
+    protocol.get(url, (response) => {
+      // 리다이렉트 처리
       if (response.statusCode === 301 || response.statusCode === 302) {
-        return downloadImageAsBase64(response.headers.location).then(resolve).catch(reject);
+        return downloadFileAsBase64(response.headers.location).then(resolve).catch(reject);
       }
       
       const chunks = [];
@@ -44,7 +48,7 @@ function downloadImageAsBase64(url) {
       response.on('end', () => {
         const buffer = Buffer.concat(chunks);
         const base64 = buffer.toString('base64');
-        const contentType = response.headers['content-type'] || 'image/png';
+        const contentType = response.headers['content-type'] || 'application/octet-stream';
         resolve({ base64, contentType });
       });
       response.on('error', reject);
@@ -137,13 +141,36 @@ module.exports = async function handler(req, res) {
       finalQuestion = extractedQuestion;
     }
 
+    // 교재 자료 준비 (PDF 또는 이미지)
+    const materialContents = [];
+    
+    // PDF가 있으면 다운로드해서 document로 추가
+    if (material?.pdfUrl) {
+      try {
+        console.log('PDF 다운로드 시작:', material.pdfUrl);
+        const downloaded = await downloadFileAsBase64(material.pdfUrl);
+        console.log('PDF 다운로드 완료, 크기:', downloaded.base64.length);
+        
+        materialContents.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: downloaded.base64
+          }
+        });
+      } catch (e) {
+        console.error('PDF 다운로드 실패:', e.message);
+        // PDF 실패 시 텍스트 내용으로 대체
+      }
+    }
+    
     // 참고 이미지가 있으면 다운로드해서 포함
-    const imageContents = [];
     if (material?.imageUrls && material.imageUrls.length > 0) {
       for (const img of material.imageUrls) {
         try {
-          const downloaded = await downloadImageAsBase64(img.url);
-          imageContents.push({
+          const downloaded = await downloadFileAsBase64(img.url);
+          materialContents.push({
             type: 'image',
             source: {
               type: 'base64',
@@ -152,13 +179,13 @@ module.exports = async function handler(req, res) {
             }
           });
         } catch (e) {
-          console.error('이미지 다운로드 실패:', e);
+          console.error('이미지 다운로드 실패:', e.message);
         }
       }
     }
 
-    // 문제집 기반 답변 생성
-    const systemPrompt = `당신은 국어 과목 전문 선생님입니다.
+    // 시스템 프롬프트 구성
+    let systemPrompt = `당신은 국어 과목 전문 선생님입니다.
 학생이 문제집의 문제에 대해 질문하면 제공된 교재 내용을 바탕으로 친절하고 이해하기 쉽게 설명해주세요.
 
 [교재 정보]
@@ -166,14 +193,21 @@ module.exports = async function handler(req, res) {
 - 단원: ${material?.chapter || '전체'}
 - 학년: ${material?.grade || '미지정'}
 - 과정: ${material?.course || '미지정'}
+`;
 
-[교재 내용]
-${material?.textContent || '내용 없음'}
+    // 텍스트 내용이 있으면 시스템 프롬프트에 추가
+    if (material?.textContent) {
+      systemPrompt += `
+[교재 텍스트 내용]
+${material.textContent}
+`;
+    }
 
+    systemPrompt += `
 ---
 
 답변 원칙:
-1. 먼저 교재 내용에서 관련 부분을 찾아 설명하세요.
+1. 제공된 교재 자료(PDF, 이미지, 텍스트)를 참고하여 답변하세요.
 2. 문제의 정답뿐 아니라 왜 그런지 이유를 설명해주세요.
 3. 학생이 비슷한 문제도 풀 수 있도록 풀이 방법을 알려주세요.
 4. 필요하면 관련 개념도 함께 설명해주세요.
@@ -182,12 +216,12 @@ ${material?.textContent || '내용 없음'}
     // 메시지 구성
     const userContent = [];
     
-    // 참고 이미지가 있으면 먼저 추가
-    if (imageContents.length > 0) {
-      userContent.push(...imageContents);
+    // 교재 자료(PDF, 이미지)가 있으면 먼저 추가
+    if (materialContents.length > 0) {
+      userContent.push(...materialContents);
       userContent.push({
         type: 'text',
-        text: `[위 이미지는 교재의 참고 자료입니다]\n\n학생 질문: ${finalQuestion}`
+        text: `[위 자료는 교재 내용입니다. 이 내용을 참고하여 학생의 질문에 답변해주세요.]\n\n학생 질문: ${finalQuestion}`
       });
     } else {
       userContent.push({
@@ -196,20 +230,27 @@ ${material?.textContent || '내용 없음'}
       });
     }
 
+    console.log('API 호출 시작, 컨텐츠 수:', userContent.length);
+
     const result = await callAPI(apiKey, {
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: systemPrompt,
       messages: [
         {
           role: 'user',
-          content: userContent.length === 1 ? userContent[0].text : userContent
+          content: userContent.length === 1 && userContent[0].type === 'text' 
+            ? userContent[0].text 
+            : userContent
         }
       ]
     });
 
+    console.log('API 응답 상태:', result.status);
+
     if (result.status !== 200) {
       const errorData = JSON.parse(result.data);
+      console.error('API 오류:', errorData);
       return res.status(result.status).json({ 
         error: errorData.error?.message || 'API 호출 실패' 
       });

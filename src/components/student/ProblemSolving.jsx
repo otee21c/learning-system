@@ -226,7 +226,8 @@ const ProblemSolving = ({ currentUser }) => {
             grade: selectedMaterial.grade,
             course: selectedMaterial.course,
             textContent: selectedMaterial.textContent,
-            imageUrls: selectedMaterial.imageUrls || []
+            imageUrls: selectedMaterial.imageUrls || [],
+            pdfUrl: selectedMaterial.pdfUrl || null
           },
           images: imagesBase64.length > 0 ? imagesBase64 : null,
           // 단일 이미지 호환성 유지

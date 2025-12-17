@@ -8,7 +8,7 @@ import { db, storage } from '../../firebase';
 import { 
   BookOpen, Upload, Trash2, FileText, Eye, Loader2, 
   ChevronDown, ChevronUp, Search, Filter, Plus, X,
-  CheckCircle, AlertCircle, Image as ImageIcon
+  CheckCircle, AlertCircle, Image as ImageIcon, File
 } from 'lucide-react';
 
 const LearningMaterialManager = () => {
@@ -27,7 +27,13 @@ const LearningMaterialManager = () => {
     description: ''
   });
   
-  // 텍스트 파일
+  // 자료 유형 선택
+  const [materialType, setMaterialType] = useState('pdf'); // 'pdf' or 'text'
+  
+  // PDF 파일
+  const [pdfFile, setPdfFile] = useState(null);
+  
+  // 텍스트 파일 (기존 호환)
   const [textFile, setTextFile] = useState(null);
   const [textContent, setTextContent] = useState('');
   
@@ -54,17 +60,42 @@ const LearningMaterialManager = () => {
   const loadMaterials = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, 'learningMaterials'), orderBy('createdAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const materialList = snapshot.docs.map(doc => ({
+      const snapshot = await getDocs(collection(db, 'learningMaterials'));
+      let materialList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      // 클라이언트에서 정렬
+      materialList.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
       setMaterials(materialList);
     } catch (error) {
       console.error('학습 자료 로드 실패:', error);
     }
     setLoading(false);
+  };
+
+  // PDF 파일 선택
+  const handlePdfFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('PDF 파일(.pdf)만 업로드할 수 있습니다.');
+        return;
+      }
+      
+      if (file.size > 20 * 1024 * 1024) {
+        alert('파일 크기는 20MB 이하만 가능합니다.');
+        return;
+      }
+      
+      setPdfFile(file);
+    }
   };
 
   // 텍스트 파일 선택
@@ -138,7 +169,12 @@ const LearningMaterialManager = () => {
       return;
     }
     
-    if (!textFile && !textContent) {
+    if (materialType === 'pdf' && !pdfFile) {
+      alert('PDF 파일을 선택해주세요.');
+      return;
+    }
+    
+    if (materialType === 'text' && !textFile && !textContent) {
       alert('텍스트 파일을 선택하거나 직접 입력해주세요.');
       return;
     }
@@ -147,8 +183,21 @@ const LearningMaterialManager = () => {
     
     try {
       const timestamp = Date.now();
+      let pdfUrl = null;
+      let pdfStoragePath = null;
       const imageUrls = [];
       
+      // PDF 업로드
+      if (materialType === 'pdf' && pdfFile) {
+        const pdfFileName = `learning-materials/${formData.grade}/${formData.course}/${timestamp}_${pdfFile.name}`;
+        const pdfStorageRef = ref(storage, pdfFileName);
+        
+        await uploadBytes(pdfStorageRef, pdfFile);
+        pdfUrl = await getDownloadURL(pdfStorageRef);
+        pdfStoragePath = pdfFileName;
+      }
+      
+      // 이미지 업로드
       for (let i = 0; i < imageFiles.length; i++) {
         const file = imageFiles[i];
         const fileName = `learning-materials/${formData.grade}/${formData.course}/${timestamp}_img${i+1}_${file.name}`;
@@ -169,8 +218,15 @@ const LearningMaterialManager = () => {
         bookName: formData.bookName,
         chapter: formData.chapter,
         description: formData.description,
-        textContent: textContent,
-        textFileName: textFile?.name || '직접 입력',
+        materialType: materialType,
+        // PDF 정보
+        pdfUrl: pdfUrl,
+        pdfStoragePath: pdfStoragePath,
+        pdfFileName: pdfFile?.name || null,
+        // 텍스트 정보 (기존 호환)
+        textContent: materialType === 'text' ? textContent : '',
+        textFileName: materialType === 'text' ? (textFile?.name || '직접 입력') : null,
+        // 이미지 정보
         imageUrls: imageUrls,
         createdAt: serverTimestamp()
       };
@@ -179,6 +235,7 @@ const LearningMaterialManager = () => {
       
       alert('학습 자료가 업로드되었습니다!');
       
+      // 폼 초기화
       setFormData({
         grade: '',
         course: '',
@@ -186,6 +243,7 @@ const LearningMaterialManager = () => {
         chapter: '',
         description: ''
       });
+      setPdfFile(null);
       setTextFile(null);
       setTextContent('');
       setImageFiles([]);
@@ -195,7 +253,7 @@ const LearningMaterialManager = () => {
       
     } catch (error) {
       console.error('업로드 실패:', error);
-      alert('업로드에 실패했습니다.');
+      alert('업로드에 실패했습니다: ' + error.message);
     }
     
     setUploading(false);
@@ -206,6 +264,16 @@ const LearningMaterialManager = () => {
     if (!window.confirm(`"${material.bookName}" 자료를 삭제하시겠습니까?`)) return;
     
     try {
+      // PDF 삭제
+      if (material.pdfStoragePath) {
+        try {
+          await deleteObject(ref(storage, material.pdfStoragePath));
+        } catch (e) {
+          console.log('PDF 삭제 실패:', e);
+        }
+      }
+      
+      // 이미지 삭제
       if (material.imageUrls && material.imageUrls.length > 0) {
         for (const img of material.imageUrls) {
           if (img.storagePath) {
@@ -229,6 +297,7 @@ const LearningMaterialManager = () => {
     }
   };
 
+  // 필터링
   const filteredMaterials = materials.filter(m => {
     if (filterGrade !== 'all' && m.grade !== filterGrade) return false;
     if (filterCourse !== 'all' && m.course !== filterCourse) return false;
@@ -246,9 +315,11 @@ const LearningMaterialManager = () => {
             </div>
             <div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                학습 자료 관리
+                학습자료 관리
               </h2>
-              <p className="text-sm text-gray-500">문제집 텍스트와 참고 이미지를 등록하세요</p>
+              <p className="text-sm text-gray-500">
+                문제집 내용을 업로드하여 AI 질문 답변에 활용
+              </p>
             </div>
           </div>
           <button
@@ -256,130 +327,209 @@ const LearningMaterialManager = () => {
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
               showForm 
                 ? 'bg-gray-200 text-gray-700' 
-                : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:shadow-lg'
             }`}
           >
-            {showForm ? <X size={20} /> : <Plus size={20} />}
+            {showForm ? <X size={18} /> : <Plus size={18} />}
             {showForm ? '닫기' : '자료 추가'}
           </button>
         </div>
 
+        {/* 업로드 폼 */}
         {showForm && (
-          <form onSubmit={handleUpload} className="bg-gray-50 rounded-xl p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <form onSubmit={handleUpload} className="bg-gray-50 rounded-xl p-6 mb-6 space-y-4">
+            <h3 className="font-bold text-lg mb-4">📚 새 학습자료 등록</h3>
+            
+            {/* 기본 정보 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">학년 *</label>
                 <select
                   value={formData.grade}
-                  onChange={(e) => setFormData({...formData, grade: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                   required
                 >
                   <option value="">선택</option>
-                  {grades.map(g => <option key={g} value={g}>{g}</option>)}
+                  {grades.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
                 </select>
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">과정 *</label>
                 <select
                   value={formData.course}
-                  onChange={(e) => setFormData({...formData, course: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, course: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                   required
                 >
                   <option value="">선택</option>
-                  {courses.map(c => <option key={c} value={c}>{c}</option>)}
+                  {courses.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">교재명 *</label>
                 <input
                   type="text"
                   value={formData.bookName}
-                  onChange={(e) => setFormData({...formData, bookName: e.target.value})}
-                  placeholder="예: 비상 문학"
+                  onChange={(e) => setFormData({ ...formData, bookName: e.target.value })}
+                  placeholder="예: 수능특강 문학"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                   required
                 />
               </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">단원/챕터</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">단원/범위</label>
                 <input
                   type="text"
                   value={formData.chapter}
-                  onChange={(e) => setFormData({...formData, chapter: e.target.value})}
-                  placeholder="예: 2단원 현대시"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">설명 (선택)</label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({...formData, description: e.target.value})}
-                  placeholder="간단한 설명"
+                  onChange={(e) => setFormData({ ...formData, chapter: e.target.value })}
+                  placeholder="예: 1단원"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                📄 텍스트 파일 (.txt) *
-              </label>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-emerald-500 transition">
-                <input
-                  type="file"
-                  onChange={handleTextFileSelect}
-                  accept=".txt"
-                  className="hidden"
-                  id="text-file-upload"
-                />
-                <label htmlFor="text-file-upload" className="cursor-pointer">
-                  {textFile ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <FileText className="text-emerald-600" size={24} />
-                      <span className="text-emerald-600 font-medium">{textFile.name}</span>
-                      <span className="text-gray-500 text-sm">
-                        ({Math.round(textContent.length / 1000)}K 글자)
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <FileText className="mx-auto text-gray-400 mb-2" size={32} />
-                      <p className="text-gray-500">텍스트 파일(.txt)을 선택하세요</p>
-                      <p className="text-gray-400 text-sm">문제집 내용을 텍스트로 정리한 파일</p>
-                    </div>
-                  )}
-                </label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">설명 (선택)</label>
+              <input
+                type="text"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="자료에 대한 간단한 설명"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            
+            {/* 자료 유형 선택 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">자료 유형 *</label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaterialType('pdf');
+                    setTextFile(null);
+                    setTextContent('');
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                    materialType === 'pdf'
+                      ? 'bg-red-100 text-red-700 border-2 border-red-500'
+                      : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                  }`}
+                >
+                  <File size={20} />
+                  PDF 파일 (추천)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMaterialType('text');
+                    setPdfFile(null);
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+                    materialType === 'text'
+                      ? 'bg-blue-100 text-blue-700 border-2 border-blue-500'
+                      : 'bg-gray-100 text-gray-600 border-2 border-transparent hover:bg-gray-200'
+                  }`}
+                >
+                  <FileText size={20} />
+                  텍스트 파일
+                </button>
               </div>
-              
-              <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  또는 직접 입력:
+            </div>
+            
+            {/* PDF 업로드 */}
+            {materialType === 'pdf' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📄 PDF 파일 업로드 *
                 </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  문제집 PDF를 업로드하면 AI가 내용을 분석하여 질문에 답변합니다. (최대 20MB)
+                </p>
+                
+                {pdfFile ? (
+                  <div className="flex items-center gap-3 p-4 bg-red-50 rounded-lg border border-red-200">
+                    <File className="text-red-500" size={24} />
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-800">{pdfFile.name}</p>
+                      <p className="text-sm text-gray-500">
+                        {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPdfFile(null)}
+                      className="p-1 hover:bg-red-200 rounded"
+                    >
+                      <X size={18} className="text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-500 transition">
+                    <input
+                      type="file"
+                      onChange={handlePdfFileSelect}
+                      accept=".pdf"
+                      className="hidden"
+                      id="pdf-upload"
+                    />
+                    <label htmlFor="pdf-upload" className="cursor-pointer">
+                      <File className="mx-auto text-gray-400 mb-2" size={36} />
+                      <p className="text-gray-600">PDF 파일을 선택하세요</p>
+                      <p className="text-sm text-gray-400">클릭하여 파일 선택</p>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* 텍스트 업로드 */}
+            {materialType === 'text' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📝 텍스트 파일 업로드 또는 직접 입력 *
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  문제집 내용을 텍스트로 정리해서 업로드하세요. (최대 5MB)
+                </p>
+                
+                <div className="mb-3">
+                  <input
+                    type="file"
+                    onChange={handleTextFileSelect}
+                    accept=".txt"
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-100 file:text-emerald-700 hover:file:bg-emerald-200"
+                  />
+                </div>
+                
                 <textarea
                   value={textContent}
                   onChange={(e) => setTextContent(e.target.value)}
-                  placeholder="문제집 내용을 직접 입력하세요..."
+                  placeholder="또는 여기에 직접 내용을 입력하세요..."
                   rows={6}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 resize-none"
                 />
+                
                 {textContent && (
                   <p className="text-xs text-gray-500 mt-1">
-                    {textContent.length.toLocaleString()}자 입력됨
+                    입력된 내용: {textContent.length.toLocaleString()}자
                   </p>
                 )}
               </div>
-            </div>
+            )}
             
-            <div className="mb-4">
+            {/* 보조 이미지 */}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                🖼️ 보조 이미지 (최대 3장, 선택사항)
+                🖼️ 보조 이미지 (선택, 최대 3장)
               </label>
               <p className="text-xs text-gray-500 mb-2">
                 도표, 그림, 핵심 개념 정리 이미지 등을 추가할 수 있습니다.
@@ -424,7 +574,7 @@ const LearningMaterialManager = () => {
             
             <button
               type="submit"
-              disabled={uploading || (!textContent)}
+              disabled={uploading || (materialType === 'pdf' && !pdfFile) || (materialType === 'text' && !textContent)}
               className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-lg font-bold hover:shadow-lg disabled:opacity-50 transition flex items-center justify-center gap-2"
             >
               {uploading ? (
@@ -442,6 +592,7 @@ const LearningMaterialManager = () => {
           </form>
         )}
 
+        {/* 필터 */}
         <div className="flex flex-wrap gap-4 items-center">
           <div className="flex items-center gap-2">
             <Filter size={18} className="text-gray-500" />
@@ -481,6 +632,7 @@ const LearningMaterialManager = () => {
         </div>
       </div>
 
+      {/* 자료 목록 */}
       <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
         <div className="p-4 bg-gray-50 border-b">
           <p className="text-sm text-gray-600">
@@ -520,10 +672,18 @@ const LearningMaterialManager = () => {
                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
                           {material.course}
                         </span>
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded flex items-center gap-1">
-                          <CheckCircle size={12} />
-                          등록완료
-                        </span>
+                        {/* PDF/텍스트 구분 */}
+                        {material.pdfUrl ? (
+                          <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded flex items-center gap-1">
+                            <File size={12} />
+                            PDF
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded flex items-center gap-1">
+                            <FileText size={12} />
+                            텍스트
+                          </span>
+                        )}
                         {material.imageUrls?.length > 0 && (
                           <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded flex items-center gap-1">
                             <ImageIcon size={12} />
@@ -549,12 +709,30 @@ const LearningMaterialManager = () => {
                   </div>
                 </div>
                 
+                {/* 확장된 상세 정보 */}
                 {expandedId === material.id && (
                   <div className="mt-4 ml-10 p-4 bg-gray-50 rounded-lg">
                     {material.description && (
                       <p className="text-sm text-gray-600 mb-3">{material.description}</p>
                     )}
                     
+                    {/* PDF 정보 */}
+                    {material.pdfUrl && (
+                      <div className="mb-4">
+                        <p className="text-sm font-medium text-gray-700 mb-2">📄 PDF 파일:</p>
+                        <a 
+                          href={material.pdfUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition"
+                        >
+                          <File size={16} />
+                          {material.pdfFileName || 'PDF 보기'}
+                        </a>
+                      </div>
+                    )}
+                    
+                    {/* 이미지 */}
                     {material.imageUrls?.length > 0 && (
                       <div className="mb-4">
                         <p className="text-sm font-medium text-gray-700 mb-2">🖼️ 참고 이미지:</p>
@@ -578,15 +756,18 @@ const LearningMaterialManager = () => {
                       </div>
                     )}
                     
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 mb-2">
-                        📝 텍스트 내용 ({material.textContent?.length?.toLocaleString() || 0}자):
-                      </p>
-                      <div className="max-h-60 overflow-y-auto bg-white p-3 rounded border text-sm whitespace-pre-wrap">
-                        {material.textContent?.substring(0, 2000) || '내용 없음'}
-                        {material.textContent?.length > 2000 && '... (더보기)'}
+                    {/* 텍스트 내용 */}
+                    {material.textContent && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">
+                          📝 텍스트 내용 ({material.textContent?.length?.toLocaleString() || 0}자):
+                        </p>
+                        <div className="max-h-60 overflow-y-auto bg-white p-3 rounded border text-sm whitespace-pre-wrap">
+                          {material.textContent?.substring(0, 2000) || '내용 없음'}
+                          {material.textContent?.length > 2000 && '... (더보기)'}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -595,13 +776,14 @@ const LearningMaterialManager = () => {
         )}
       </div>
 
+      {/* 안내 */}
       <div className="bg-emerald-50 rounded-xl p-4">
         <h4 className="font-medium text-emerald-800 mb-2">💡 사용 방법</h4>
         <ul className="text-sm text-emerald-700 space-y-1">
-          <li>1. 문제집 내용을 텍스트 파일(.txt)로 정리하거나 직접 입력하세요.</li>
-          <li>2. 도표, 그림 등 참고 이미지가 있으면 함께 업로드하세요 (최대 3장).</li>
-          <li>3. 학생들이 해당 교재에 대해 질문하면 등록된 내용을 바탕으로 답변합니다.</li>
-          <li>• 텍스트 내용이 정확할수록 답변 품질이 좋아집니다.</li>
+          <li>1. <strong>PDF 업로드 (추천)</strong>: 문제집 PDF를 그대로 업로드하면 AI가 표, 그림, 텍스트를 모두 인식합니다.</li>
+          <li>2. 텍스트 업로드: PDF가 없는 경우 내용을 텍스트로 정리해서 업로드할 수 있습니다.</li>
+          <li>3. 보조 이미지를 추가하면 도표, 그림 등을 참고하여 더 정확한 답변이 가능합니다.</li>
+          <li>4. 학생들이 해당 교재에 대해 질문하면 등록된 내용을 바탕으로 답변합니다.</li>
         </ul>
       </div>
     </div>
