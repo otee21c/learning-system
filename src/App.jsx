@@ -15,7 +15,7 @@ import VideoManager from './components/admin/VideoManager';
 import OMRBatchGrading from './components/admin/OMRBatchGrading';
 import StatisticsView from './components/admin/StatisticsView';
 import HomeworkManager from './components/admin/HomeworkManager';
-import ProblemAnalysisManager from './components/admin/ProblemAnalysisManager';
+import QuestionManager from './components/admin/QuestionManager';
 import NotificationManager from './components/admin/NotificationManager';
 import CurriculumManager from './components/admin/CurriculumManager';
 import AttendanceManager from './components/admin/AttendanceManager';
@@ -28,7 +28,6 @@ import { Home } from 'lucide-react';
 import ExamTaking from './components/student/ExamTaking';
 import MyGrades from './components/student/MyGrades';
 import HomeworkSubmission from './components/student/HomeworkSubmission';
-import ProblemAnalysis from './components/student/ProblemAnalysis';
 import ConceptQuestion from './components/student/ConceptQuestion';
 import ProblemSolving from './components/student/ProblemSolving';
 
@@ -45,7 +44,6 @@ export default function App() {
   const [exams, setExams] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [videos, setVideos] = useState([]);
-  const [problemAnalysisList, setProblemAnalysisList] = useState([]);
 
   // Firebase 인증 상태 감지
   useEffect(() => {
@@ -119,18 +117,11 @@ export default function App() {
       if (data.length > 0) setVideos(data);
     });
 
-    // 문제 분석 데이터
-    const unsubProblemAnalysis = onSnapshot(collection(db, 'problemAnalysis'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setProblemAnalysisList(data);
-    });
-
     return () => {
       unsubStudents();
       unsubExams();
       unsubHomeworks();
       unsubVideos();
-      unsubProblemAnalysis();
     };
   }, [currentUser]);
 
@@ -207,7 +198,7 @@ export default function App() {
               {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} />}
               {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} />}
               {activeTab === 'homework' && <HomeworkManager students={students} />}
-              {activeTab === 'problem-analysis' && <ProblemAnalysisManager problemAnalysisList={problemAnalysisList} />}
+              {activeTab === 'question-manager' && <QuestionManager />}
               {activeTab === 'notification' && <NotificationManager students={students} />}
               {activeTab === 'curriculum' && <CurriculumManager students={students} />}
               {activeTab === 'attendance' && <AttendanceManager students={students} />}
@@ -222,7 +213,6 @@ export default function App() {
             <>
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
               {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
-              {activeTab === 'problem' && <ProblemAnalysis currentUser={currentUser} problemAnalysisList={problemAnalysisList} />}
               {activeTab === 'concept-question' && <ConceptQuestion currentUser={currentUser} />}
               {activeTab === 'problem-solving' && <ProblemSolving currentUser={currentUser} />}
               {activeTab === 'mypage' && <MyGrades currentUser={currentUser} />}

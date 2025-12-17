@@ -4,7 +4,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { 
   HelpCircle, Send, BookOpen, Camera, X, Loader2, 
-  ChevronDown, History, Lightbulb, AlertCircle,
+  ChevronDown, ChevronUp, History, Lightbulb, AlertCircle,
   Image as ImageIcon, MessageCircle
 } from 'lucide-react';
 
@@ -17,8 +17,8 @@ const ProblemSolving = ({ currentUser }) => {
   // 질문
   const [questionType, setQuestionType] = useState('text');
   const [questionText, setQuestionText] = useState('');
-  const [questionImage, setQuestionImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const [questionImages, setQuestionImages] = useState([]); // 여러 장
+  const [imagePreviews, setImagePreviews] = useState([]); // 여러 장 미리보기
   
   // 답변
   const [answer, setAnswer] = useState('');
@@ -29,8 +29,12 @@ const ProblemSolving = ({ currentUser }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [weeklyCount, setWeeklyCount] = useState(0);
   const [canAsk, setCanAsk] = useState(true);
+  
+  // 이력 펼침 상태
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null);
 
   const WEEKLY_LIMIT = 3;
+  const MAX_IMAGES = 10;
 
   // 이번 주 시작일 계산
   const getWeekStart = () => {
@@ -57,14 +61,12 @@ const ProblemSolving = ({ currentUser }) => {
   const loadMaterials = async () => {
     setLoadingMaterials(true);
     try {
-      // orderBy 없이 조회 후 클라이언트에서 정렬
       const snapshot = await getDocs(collection(db, 'learningMaterials'));
       let materialList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
-      // 클라이언트에서 최신순 정렬
       materialList.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
@@ -80,7 +82,6 @@ const ProblemSolving = ({ currentUser }) => {
 
   const loadQuestionHistory = async () => {
     try {
-      // where만 사용하고 orderBy는 클라이언트에서 처리 (인덱스 불필요)
       const q = query(
         collection(db, 'problemQuestions'),
         where('studentId', '==', currentUser.id)
@@ -91,7 +92,6 @@ const ProblemSolving = ({ currentUser }) => {
         ...doc.data()
       }));
       
-      // 클라이언트에서 최신순 정렬
       history.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
@@ -100,7 +100,6 @@ const ProblemSolving = ({ currentUser }) => {
       
       setQuestionHistory(history);
 
-      // 이번 주 질문 횟수 계산
       const weekStart = getWeekStart();
       const weeklyQuestions = history.filter(q => {
         if (!q.createdAt) return false;
@@ -112,34 +111,55 @@ const ProblemSolving = ({ currentUser }) => {
       setCanAsk(weeklyQuestions.length < WEEKLY_LIMIT);
     } catch (error) {
       console.error('질문 이력 로드 실패:', error);
-      // 에러가 발생해도 빈 배열로 설정
       setQuestionHistory([]);
       setWeeklyCount(0);
       setCanAsk(true);
     }
   };
 
-  // 이미지 선택
-  const handleImageSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
+  // 이미지 여러 장 선택
+  const handleImagesSelect = (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length + questionImages.length > MAX_IMAGES) {
+      alert(`이미지는 최대 ${MAX_IMAGES}장까지 업로드 가능합니다.`);
+      return;
+    }
+    
+    // 파일 크기 체크
+    for (const file of files) {
       if (file.size > 5 * 1024 * 1024) {
-        alert('이미지 크기는 5MB 이하만 가능합니다.');
+        alert('이미지 크기는 개당 5MB 이하만 가능합니다.');
         return;
       }
-      
-      setQuestionImage(file);
-      
-      const reader = new FileReader();
-      reader.onload = (e) => setImagePreview(e.target.result);
-      reader.readAsDataURL(file);
     }
+    
+    setQuestionImages(prev => [...prev, ...files]);
+    
+    // 미리보기 생성
+    const newPreviews = files.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    });
+    
+    Promise.all(newPreviews).then(previews => {
+      setImagePreviews(prev => [...prev, ...previews]);
+    });
   };
 
   // 이미지 제거
-  const removeImage = () => {
-    setQuestionImage(null);
-    setImagePreview(null);
+  const removeImage = (index) => {
+    setQuestionImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 전체 이미지 초기화
+  const clearAllImages = () => {
+    setQuestionImages([]);
+    setImagePreviews([]);
   };
 
   // 질문하기
@@ -159,7 +179,7 @@ const ProblemSolving = ({ currentUser }) => {
       return;
     }
     
-    if (questionType === 'image' && !questionImage) {
+    if (questionType === 'image' && questionImages.length === 0) {
       alert('질문 이미지를 업로드해주세요.');
       return;
     }
@@ -168,22 +188,28 @@ const ProblemSolving = ({ currentUser }) => {
     setAnswer('');
     
     try {
-      let questionImageUrl = null;
-      let imageBase64 = null;
+      let uploadedImageUrls = [];
+      let imagesBase64 = [];
       
       // 이미지 질문인 경우
-      if (questionType === 'image' && questionImage) {
-        const timestamp = Date.now();
-        const fileName = `problem-questions/${currentUser.id}/${timestamp}_${questionImage.name}`;
-        const storageRef = ref(storage, fileName);
-        await uploadBytes(storageRef, questionImage);
-        questionImageUrl = await getDownloadURL(storageRef);
-        
-        imageBase64 = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result.split(',')[1]);
-          reader.readAsDataURL(questionImage);
-        });
+      if (questionType === 'image' && questionImages.length > 0) {
+        for (const file of questionImages) {
+          // 이미지 업로드
+          const timestamp = Date.now();
+          const fileName = `problem-questions/${currentUser.id}/${timestamp}_${file.name}`;
+          const storageRef = ref(storage, fileName);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          uploadedImageUrls.push(url);
+          
+          // base64 변환
+          const base64 = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.readAsDataURL(file);
+          });
+          imagesBase64.push({ base64, mediaType: file.type });
+        }
       }
       
       // 서버리스 함수 호출
@@ -202,8 +228,10 @@ const ProblemSolving = ({ currentUser }) => {
             textContent: selectedMaterial.textContent,
             imageUrls: selectedMaterial.imageUrls || []
           },
-          imageBase64: imageBase64,
-          mediaType: questionImage?.type
+          images: imagesBase64.length > 0 ? imagesBase64 : null,
+          // 단일 이미지 호환성 유지
+          imageBase64: imagesBase64.length === 1 ? imagesBase64[0].base64 : null,
+          mediaType: imagesBase64.length === 1 ? imagesBase64[0].mediaType : null
         })
       });
       
@@ -226,12 +254,11 @@ const ProblemSolving = ({ currentUser }) => {
         materialName: `${selectedMaterial.bookName} ${selectedMaterial.chapter || ''}`,
         questionType: questionType,
         question: finalQuestion,
-        questionImageUrl: questionImageUrl,
+        questionImageUrls: uploadedImageUrls,
         answer: answerText,
         createdAt: serverTimestamp()
       });
       
-      // 이력 새로고침
       await loadQuestionHistory();
       
     } catch (error) {
@@ -245,9 +272,14 @@ const ProblemSolving = ({ currentUser }) => {
   // 새 질문
   const resetQuestion = () => {
     setQuestionText('');
-    setQuestionImage(null);
-    setImagePreview(null);
+    setQuestionImages([]);
+    setImagePreviews([]);
     setAnswer('');
+  };
+
+  // 이력 펼침/접기 토글
+  const toggleHistoryExpand = (id) => {
+    setExpandedHistoryId(expandedHistoryId === id ? null : id);
   };
 
   return (
@@ -374,7 +406,7 @@ const ProblemSolving = ({ currentUser }) => {
               }`}
             >
               <Camera size={20} />
-              사진으로 질문
+              사진으로 질문 (최대 {MAX_IMAGES}장)
             </button>
           </div>
 
@@ -394,36 +426,58 @@ const ProblemSolving = ({ currentUser }) => {
             </div>
           )}
 
-          {/* 이미지 질문 */}
+          {/* 이미지 질문 (여러 장) */}
           {questionType === 'image' && (
             <div className="mb-4">
-              {imagePreview ? (
-                <div className="relative">
-                  <img 
-                    src={imagePreview} 
-                    alt="질문 이미지" 
-                    className="max-h-60 mx-auto rounded-lg"
-                  />
-                  <button
-                    onClick={removeImage}
-                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                  >
-                    <X size={16} />
-                  </button>
+              {/* 이미지 미리보기 */}
+              {imagePreviews.length > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      업로드된 이미지 ({imagePreviews.length}/{MAX_IMAGES}장)
+                    </p>
+                    <button
+                      onClick={clearAllImages}
+                      className="text-xs text-red-500 hover:text-red-700"
+                    >
+                      전체 삭제
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="relative">
+                        <img 
+                          src={preview} 
+                          alt={`미리보기 ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border"
+                        />
+                        <button
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-violet-500 transition">
+              )}
+              
+              {/* 이미지 추가 버튼 */}
+              {imagePreviews.length < MAX_IMAGES && (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-violet-500 transition">
                   <input
                     type="file"
-                    onChange={handleImageSelect}
+                    onChange={handleImagesSelect}
                     accept="image/*"
+                    multiple
                     className="hidden"
-                    id="problem-question-image"
+                    id="problem-question-images"
                   />
-                  <label htmlFor="problem-question-image" className="cursor-pointer">
-                    <ImageIcon className="mx-auto text-gray-400 mb-2" size={40} />
+                  <label htmlFor="problem-question-images" className="cursor-pointer">
+                    <ImageIcon className="mx-auto text-gray-400 mb-2" size={36} />
                     <p className="text-gray-500">문제 사진을 업로드하세요</p>
-                    <p className="text-gray-400 text-sm">손글씨로 질문을 적어도 됩니다</p>
+                    <p className="text-gray-400 text-sm">여러 장 선택 가능 (최대 {MAX_IMAGES}장)</p>
                   </label>
                 </div>
               )}
@@ -433,7 +487,7 @@ const ProblemSolving = ({ currentUser }) => {
           {/* 질문 버튼 */}
           <button
             onClick={handleSubmitQuestion}
-            disabled={loading || (questionType === 'text' && !questionText.trim()) || (questionType === 'image' && !questionImage)}
+            disabled={loading || (questionType === 'text' && !questionText.trim()) || (questionType === 'image' && questionImages.length === 0)}
             className="w-full py-3 bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-lg font-bold hover:shadow-lg disabled:opacity-50 transition flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -490,7 +544,7 @@ const ProblemSolving = ({ currentUser }) => {
         </div>
       )}
 
-      {/* 질문 이력 */}
+      {/* 질문 이력 - 클릭하면 전체 보기 */}
       {showHistory && (
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -501,25 +555,74 @@ const ProblemSolving = ({ currentUser }) => {
           {questionHistory.length === 0 ? (
             <p className="text-gray-500 text-center py-8">아직 질문 이력이 없습니다.</p>
           ) : (
-            <div className="space-y-4 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {questionHistory.map((item) => (
-                <div key={item.id} className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-medium rounded">
-                      {item.materialName || '교재 없음'}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
-                    </span>
+                <div 
+                  key={item.id} 
+                  className="border rounded-lg overflow-hidden"
+                >
+                  {/* 헤더 - 클릭 가능 */}
+                  <div 
+                    onClick={() => toggleHistoryExpand(item.id)}
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition flex items-center justify-between"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 bg-violet-100 text-violet-700 text-xs font-medium rounded">
+                          {item.materialName || '교재 없음'}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        Q: {item.question || '질문 내용 없음'}
+                      </p>
+                    </div>
+                    {expandedHistoryId === item.id ? (
+                      <ChevronUp className="text-gray-400 flex-shrink-0 ml-2" size={20} />
+                    ) : (
+                      <ChevronDown className="text-gray-400 flex-shrink-0 ml-2" size={20} />
+                    )}
                   </div>
                   
-                  <p className="text-sm font-medium text-gray-900 mb-2">
-                    Q: {item.question?.substring(0, 100) || '질문 내용 없음'}{item.question?.length > 100 ? '...' : ''}
-                  </p>
-                  
-                  <p className="text-sm text-gray-600">
-                    A: {item.answer?.substring(0, 150) || '답변 없음'}{item.answer?.length > 150 ? '...' : ''}
-                  </p>
+                  {/* 펼쳐진 내용 */}
+                  {expandedHistoryId === item.id && (
+                    <div className="px-4 pb-4 border-t bg-gray-50">
+                      {/* 질문 이미지들 */}
+                      {(item.questionImageUrls?.length > 0 || item.questionImageUrl) && (
+                        <div className="mt-3 mb-3">
+                          <p className="text-xs text-gray-500 mb-2">📷 질문 이미지:</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {(item.questionImageUrls || [item.questionImageUrl]).filter(Boolean).map((url, idx) => (
+                              <img 
+                                key={idx}
+                                src={url} 
+                                alt={`질문 이미지 ${idx + 1}`} 
+                                className="w-full h-24 object-cover rounded-lg border"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* 전체 질문 */}
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">❓ 질문:</p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded-lg border">
+                          {item.question || '질문 내용 없음'}
+                        </p>
+                      </div>
+                      
+                      {/* 전체 답변 */}
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">💡 답변:</p>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap bg-violet-50 p-3 rounded-lg border border-violet-100">
+                          {item.answer || '답변 없음'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -533,8 +636,8 @@ const ProblemSolving = ({ currentUser }) => {
         <ul className="text-sm text-violet-700 space-y-1">
           <li>• 문제 번호를 정확히 적어주세요. (예: "15번 문제")</li>
           <li>• 어떤 부분이 헷갈리는지 구체적으로 질문하세요.</li>
-          <li>• 사진으로 질문할 때는 글씨가 잘 보이게 찍어주세요.</li>
-          <li>• 주 3회까지 질문할 수 있어요</li>
+          <li>• 사진으로 질문할 때는 여러 장 업로드 가능해요 (최대 {MAX_IMAGES}장)</li>
+          <li>• 주 {WEEKLY_LIMIT}회까지 질문할 수 있어요</li>
         </ul>
       </div>
     </div>

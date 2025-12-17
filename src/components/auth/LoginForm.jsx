@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../firebase';
 import { collection, getDocs } from 'firebase/firestore';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Home } from 'lucide-react';
 
 export default function LoginForm() {
   const [loginForm, setLoginForm] = useState({ id: '', password: '' });
@@ -38,6 +38,17 @@ export default function LoginForm() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {/* 홈페이지 버튼 */}
+        <div className="mb-6 text-center">
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-white/20 backdrop-blur-sm text-white rounded-xl hover:bg-white/30 transition-all font-medium border border-white/30"
+          >
+            <Home size={20} />
+            홈페이지로 돌아가기
+          </a>
+        </div>
+
         {/* 메인 카드 */}
         <div className="text-center mb-8">
           {/* 책 아이콘 */}

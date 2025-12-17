@@ -66,10 +66,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { question, material, imageBase64, mediaType } = req.body || {};
+    const { question, material, imageBase64, mediaType, images } = req.body || {};
 
-    if (!question && !imageBase64) {
-      return res.status(400).json({ error: 'question or imageBase64 is required' });
+    if (!question && !imageBase64 && (!images || images.length === 0)) {
+      return res.status(400).json({ error: 'question or images is required' });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY;
@@ -81,28 +81,48 @@ module.exports = async function handler(req, res) {
     let finalQuestion = question;
     let extractedQuestion = null;
 
+    // 여러 이미지 질문 처리
+    const questionImages = [];
+    if (images && images.length > 0) {
+      for (const img of images) {
+        questionImages.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: img.mediaType || 'image/jpeg',
+            data: img.base64
+          }
+        });
+      }
+    } else if (imageBase64) {
+      // 단일 이미지 (하위 호환성)
+      questionImages.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType || 'image/jpeg',
+          data: imageBase64
+        }
+      });
+    }
+
     // 이미지 질문인 경우 먼저 질문 내용 추출
-    if (imageBase64) {
+    if (questionImages.length > 0) {
+      const extractContent = [
+        ...questionImages,
+        {
+          type: 'text',
+          text: '이 이미지에서 학생이 질문하는 내용을 추출해주세요. 손글씨로 쓴 질문이 있다면 그 내용을 읽어주세요. 문제 번호가 있다면 함께 파악해주세요. 여러 이미지가 있다면 전체를 종합해서 질문 내용을 파악해주세요.'
+        }
+      ];
+
       const extractResult = await callAPI(apiKey, {
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType || 'image/jpeg',
-                  data: imageBase64
-                }
-              },
-              {
-                type: 'text',
-                text: '이 이미지에서 학생이 질문하는 내용을 추출해주세요. 손글씨로 쓴 질문이 있다면 그 내용을 읽어주세요. 문제 번호가 있다면 함께 파악해주세요.'
-              }
-            ]
+            content: extractContent
           }
         ]
       });

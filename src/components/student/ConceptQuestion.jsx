@@ -4,7 +4,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { 
   MessageCircle, Send, Camera, X, Loader2, 
-  History, Lightbulb, AlertCircle,
+  History, Lightbulb, AlertCircle, ChevronDown, ChevronUp,
   Image as ImageIcon
 } from 'lucide-react';
 
@@ -24,6 +24,9 @@ const ConceptQuestion = ({ currentUser }) => {
   const [showHistory, setShowHistory] = useState(false);
   const [weeklyCount, setWeeklyCount] = useState(0);
   const [canAsk, setCanAsk] = useState(true);
+  
+  // 이력 펼침 상태
+  const [expandedHistoryId, setExpandedHistoryId] = useState(null);
 
   const WEEKLY_LIMIT = 3;
 
@@ -46,7 +49,6 @@ const ConceptQuestion = ({ currentUser }) => {
 
   const loadQuestionHistory = async () => {
     try {
-      // where만 사용하고 orderBy는 클라이언트에서 처리 (인덱스 불필요)
       const q = query(
         collection(db, 'conceptQuestions'),
         where('studentId', '==', currentUser.id)
@@ -57,7 +59,6 @@ const ConceptQuestion = ({ currentUser }) => {
         ...doc.data()
       }));
       
-      // 클라이언트에서 최신순 정렬
       history.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
@@ -66,7 +67,6 @@ const ConceptQuestion = ({ currentUser }) => {
       
       setQuestionHistory(history);
 
-      // 이번 주 질문 횟수 계산
       const weekStart = getWeekStart();
       const weeklyQuestions = history.filter(q => {
         if (!q.createdAt) return false;
@@ -78,7 +78,6 @@ const ConceptQuestion = ({ currentUser }) => {
       setCanAsk(weeklyQuestions.length < WEEKLY_LIMIT);
     } catch (error) {
       console.error('질문 이력 로드 실패:', error);
-      // 에러가 발생해도 빈 배열로 설정
       setQuestionHistory([]);
       setWeeklyCount(0);
       setCanAsk(true);
@@ -132,16 +131,13 @@ const ConceptQuestion = ({ currentUser }) => {
       let questionImageUrl = null;
       let imageBase64 = null;
       
-      // 이미지 질문인 경우
       if (questionType === 'image' && questionImage) {
-        // 이미지 업로드
         const timestamp = Date.now();
         const fileName = `concept-questions/${currentUser.id}/${timestamp}_${questionImage.name}`;
         const storageRef = ref(storage, fileName);
         await uploadBytes(storageRef, questionImage);
         questionImageUrl = await getDownloadURL(storageRef);
         
-        // 이미지를 base64로 변환
         imageBase64 = await new Promise((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -149,7 +145,6 @@ const ConceptQuestion = ({ currentUser }) => {
         });
       }
       
-      // 서버리스 함수 호출
       const response = await fetch('/api/concept-question', {
         method: 'POST',
         headers: {
@@ -173,7 +168,6 @@ const ConceptQuestion = ({ currentUser }) => {
       
       setAnswer(answerText);
       
-      // 질문 기록 저장
       await addDoc(collection(db, 'conceptQuestions'), {
         studentId: currentUser.id,
         studentName: currentUser.name,
@@ -184,7 +178,6 @@ const ConceptQuestion = ({ currentUser }) => {
         createdAt: serverTimestamp()
       });
       
-      // 이력 새로고침
       await loadQuestionHistory();
       
     } catch (error) {
@@ -201,6 +194,11 @@ const ConceptQuestion = ({ currentUser }) => {
     setQuestionImage(null);
     setImagePreview(null);
     setAnswer('');
+  };
+
+  // 이력 펼침/접기 토글
+  const toggleHistoryExpand = (id) => {
+    setExpandedHistoryId(expandedHistoryId === id ? null : id);
   };
 
   return (
@@ -393,7 +391,7 @@ const ConceptQuestion = ({ currentUser }) => {
         </div>
       )}
 
-      {/* 질문 이력 */}
+      {/* 질문 이력 - 클릭하면 전체 보기 */}
       {showHistory && (
         <div className="bg-white rounded-2xl shadow-lg p-6">
           <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -404,22 +402,66 @@ const ConceptQuestion = ({ currentUser }) => {
           {questionHistory.length === 0 ? (
             <p className="text-gray-500 text-center py-8">아직 질문 이력이 없습니다.</p>
           ) : (
-            <div className="space-y-4 max-h-96 overflow-y-auto">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {questionHistory.map((item) => (
-                <div key={item.id} className="border rounded-lg p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs text-gray-400">
-                      {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
-                    </span>
+                <div 
+                  key={item.id} 
+                  className="border rounded-lg overflow-hidden"
+                >
+                  {/* 헤더 - 클릭 가능 */}
+                  <div 
+                    onClick={() => toggleHistoryExpand(item.id)}
+                    className="p-4 cursor-pointer hover:bg-gray-50 transition flex items-center justify-between"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-gray-400">
+                          {item.createdAt?.toDate?.()?.toLocaleDateString('ko-KR') || '날짜 없음'}
+                        </span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        Q: {item.question || '질문 내용 없음'}
+                      </p>
+                    </div>
+                    {expandedHistoryId === item.id ? (
+                      <ChevronUp className="text-gray-400 flex-shrink-0 ml-2" size={20} />
+                    ) : (
+                      <ChevronDown className="text-gray-400 flex-shrink-0 ml-2" size={20} />
+                    )}
                   </div>
                   
-                  <p className="text-sm font-medium text-gray-900 mb-2">
-                    Q: {item.question?.substring(0, 100) || '질문 내용 없음'}{item.question?.length > 100 ? '...' : ''}
-                  </p>
-                  
-                  <p className="text-sm text-gray-600">
-                    A: {item.answer?.substring(0, 150) || '답변 없음'}{item.answer?.length > 150 ? '...' : ''}
-                  </p>
+                  {/* 펼쳐진 내용 */}
+                  {expandedHistoryId === item.id && (
+                    <div className="px-4 pb-4 border-t bg-gray-50">
+                      {/* 질문 이미지 */}
+                      {item.questionImageUrl && (
+                        <div className="mt-3 mb-3">
+                          <p className="text-xs text-gray-500 mb-2">📷 질문 이미지:</p>
+                          <img 
+                            src={item.questionImageUrl} 
+                            alt="질문 이미지" 
+                            className="max-h-40 rounded-lg border"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* 전체 질문 */}
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">❓ 질문:</p>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded-lg border">
+                          {item.question || '질문 내용 없음'}
+                        </p>
+                      </div>
+                      
+                      {/* 전체 답변 */}
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-500 mb-1">💡 답변:</p>
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap bg-blue-50 p-3 rounded-lg border border-blue-100">
+                          {item.answer || '답변 없음'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
