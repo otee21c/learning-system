@@ -111,48 +111,53 @@ export default function Homepage() {
 
   // 스크롤 애니메이션 효과
   useEffect(() => {
-    const observerOptions = {
-      root: null,
-      rootMargin: '0px',
-      threshold: 0.1
-    };
+    // 약간의 지연 후 애니메이션 시작 (페이지 로드 후)
+    const timer = setTimeout(() => {
+      const observerOptions = {
+        root: null,
+        rootMargin: '0px 0px -50px 0px',
+        threshold: 0.1
+      };
 
-    const observerCallback = (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('hp-animate-visible');
-          // 카드에 흔들기 애니메이션 추가
-          if (entry.target.classList.contains('hp-animate-card')) {
-            setTimeout(() => {
-              entry.target.classList.add('hp-shake');
-            }, 800); // 올라온 후 0.8초 뒤에 흔들기
+      const observerCallback = (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('hp-animate-visible');
+            // 카드에 흔들기 애니메이션 추가
+            if (entry.target.classList.contains('hp-animate-card')) {
+              setTimeout(() => {
+                entry.target.classList.add('hp-shake');
+              }, 800);
+            }
           }
-        }
+        });
+      };
+
+      const observer = new IntersectionObserver(observerCallback, observerOptions);
+
+      // 관찰할 요소들 등록
+      const elementsToObserve = [
+        branchesRef.current,
+        programBannerRef.current,
+        contactRef.current,
+        bannerSliderRef.current
+      ];
+
+      elementsToObserve.forEach((el) => {
+        if (el) observer.observe(el);
       });
-    };
 
-    const observer = new IntersectionObserver(observerCallback, observerOptions);
+      // 지점 카드들 관찰 (개별적으로)
+      const cards = document.querySelectorAll('.hp-branch-card');
+      cards.forEach((card, index) => {
+        card.style.transitionDelay = `${index * 0.2}s`;
+        observer.observe(card);
+      });
 
-    // 관찰할 요소들 등록
-    const elementsToObserve = [
-      branchesRef.current,
-      programBannerRef.current,
-      contactRef.current,
-      bannerSliderRef.current
-    ];
+      return () => observer.disconnect();
+    }, 100);
 
-    elementsToObserve.forEach((el) => {
-      if (el) observer.observe(el);
-    });
-
-    // 개별 카드들도 관찰
-    const cards = document.querySelectorAll('.hp-branch-card');
-    cards.forEach((card, index) => {
-      card.style.transitionDelay = `${index * 0.15}s`;
-      observer.observe(card);
-    });
-
-    return () => observer.disconnect();
+    return () => clearTimeout(timer);
   }, []);
 
   // 배너 저장
@@ -163,14 +168,14 @@ export default function Homepage() {
     }
 
     try {
-      if (editingBanner) {
-        // 수정
+      if (editingBanner && !editingBanner.id.startsWith('default')) {
+        // Firebase에 저장된 배너 수정
         await updateDoc(doc(db, 'banners', editingBanner.id), {
           ...bannerForm,
           updatedAt: new Date().toISOString()
         });
       } else {
-        // 추가
+        // 새 배너 추가 (기본 배너 수정 시에도 새로 추가)
         await addDoc(collection(db, 'banners'), {
           ...bannerForm,
           createdAt: new Date().toISOString()
@@ -194,17 +199,47 @@ export default function Homepage() {
   };
 
   // 배너 삭제
-  const handleDeleteBanner = async (id) => {
+  const handleDeleteBanner = async (banner) => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
     
     try {
-      await deleteDoc(doc(db, 'banners', id));
-      
-      // 목록 새로고침
-      const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setBanners(data.length > 0 ? data : defaultBanners);
+      if (banner.id.startsWith('default')) {
+        // 기본 배너는 목록에서만 제거 (새로고침하면 다시 나타남)
+        // Firebase에 빈 데이터라도 저장해서 기본 배너 안 보이게
+        const newBanners = banners.filter(b => b.id !== banner.id);
+        setBanners(newBanners);
+        
+        // 남은 배너들을 Firebase에 저장 (기본 배너 제외)
+        if (newBanners.filter(b => !b.id.startsWith('default')).length === 0 && newBanners.length > 0) {
+          // 기본 배너만 남았다면, 남은 기본 배너들을 Firebase에 저장
+          for (const b of newBanners) {
+            if (b.id.startsWith('default')) {
+              await addDoc(collection(db, 'banners'), {
+                category: b.category,
+                title: b.title,
+                result: b.result,
+                highlight: b.highlight,
+                info: b.info,
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+          // 다시 불러오기
+          const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+          const snapshot = await getDocs(q);
+          const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setBanners(data);
+        }
+      } else {
+        // Firebase에서 삭제
+        await deleteDoc(doc(db, 'banners', banner.id));
+        
+        // 목록 새로고침
+        const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setBanners(data.length > 0 ? data : defaultBanners);
+      }
       
       alert('삭제되었습니다.');
     } catch (error) {
@@ -230,6 +265,41 @@ export default function Homepage() {
     setEditingBanner(null);
     setBannerForm({ category: '교과디렉션', title: '', result: '', highlight: '', info: '' });
   };
+
+  // 모든 기본 배너를 Firebase로 마이그레이션
+  const handleMigrateToFirebase = async () => {
+    if (!window.confirm('현재 배너들을 저장하시겠습니까? (저장 후에는 자유롭게 수정/삭제할 수 있습니다)')) return;
+    
+    try {
+      // 기본 배너들을 Firebase에 저장
+      for (const banner of banners) {
+        if (banner.id.startsWith('default')) {
+          await addDoc(collection(db, 'banners'), {
+            category: banner.category,
+            title: banner.title,
+            result: banner.result,
+            highlight: banner.highlight,
+            info: banner.info,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+      
+      // 다시 불러오기
+      const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBanners(data);
+      
+      alert('저장되었습니다. 이제 자유롭게 수정/삭제할 수 있습니다.');
+    } catch (error) {
+      console.error('Error migrating banners:', error);
+      alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 기본 배너인지 확인
+  const hasDefaultBanners = banners.some(b => b.id.startsWith('default'));
 
   return (
     <div className="homepage">
@@ -276,16 +346,25 @@ export default function Homepage() {
           <div className="hp-banner-manager">
             <h3>{editingBanner ? '배너 수정' : '새 배너 추가'}</h3>
             
+            {/* 기본 배너 마이그레이션 안내 */}
+            {hasDefaultBanners && (
+              <div className="hp-banner-migrate-notice">
+                <p>💡 현재 기본 배너를 사용 중입니다. 아래 버튼을 클릭하면 저장되어 자유롭게 수정/삭제할 수 있습니다.</p>
+                <button onClick={handleMigrateToFirebase} className="hp-btn hp-btn-primary">
+                  배너 저장하기
+                </button>
+              </div>
+            )}
+            
             <div className="hp-banner-form">
               <div className="hp-form-row">
                 <label>카테고리</label>
-                <select 
+                <input 
+                  type="text"
                   value={bannerForm.category}
                   onChange={(e) => setBannerForm({...bannerForm, category: e.target.value})}
-                >
-                  <option value="교과디렉션">교과디렉션</option>
-                  <option value="수능솔루션">수능솔루션</option>
-                </select>
+                  placeholder="예: 교과디렉션, 수능솔루션"
+                />
               </div>
               
               <div className="hp-form-row">
@@ -342,7 +421,7 @@ export default function Homepage() {
 
             {/* 배너 목록 */}
             <div className="hp-banner-list">
-              <h4>현재 배너 목록</h4>
+              <h4>현재 배너 목록 ({banners.length}개)</h4>
               {banners.map((banner, index) => (
                 <div key={banner.id} className="hp-banner-list-item">
                   <span className="hp-banner-list-num">{index + 1}</span>
@@ -350,9 +429,7 @@ export default function Homepage() {
                   <span className="hp-banner-list-title">{banner.title} → {banner.highlight}</span>
                   <div className="hp-banner-list-actions">
                     <button onClick={() => handleEditBanner(banner)} className="hp-btn-small">수정</button>
-                    {!banner.id.startsWith('default') && (
-                      <button onClick={() => handleDeleteBanner(banner.id)} className="hp-btn-small hp-btn-danger">삭제</button>
-                    )}
+                    <button onClick={() => handleDeleteBanner(banner)} className="hp-btn-small hp-btn-danger">삭제</button>
                   </div>
                 </div>
               ))}
@@ -373,7 +450,7 @@ export default function Homepage() {
         </div>
       </section>
 
-      {/* 지점 섹션 */}
+      {/* 지점 섹션 (브랜치 카드) */}
       <section className="hp-branches hp-animate-section" ref={branchesRef}>
         {/* 가로 3개: 광진원 - 연구소 - 배곧원 */}
         <div className="hp-branches-row">
