@@ -1,14 +1,113 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { db, auth } from '../../firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy, query } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import BannerSlider from './components/BannerSlider';
 import './Homepage.css';
 
+// 기본 배너 데이터 (Firebase에 데이터 없을 때 사용)
+const defaultBanners = [
+  {
+    id: 'default1',
+    category: '교과디렉션',
+    title: '2년째 국어 반타작',
+    result: '내신 원점수',
+    highlight: '30점 이상 상승!',
+    info: '- 특목고 2학년 -'
+  },
+  {
+    id: 'default2',
+    category: '수능솔루션',
+    title: '국어 모의 만년 4등급',
+    result: '2023 불수능',
+    highlight: '2등급 안착!',
+    info: '- 8학군 재수생 -'
+  },
+  {
+    id: 'default3',
+    category: '교과디렉션',
+    title: '국어 3등급 정체',
+    result: '내신 평균',
+    highlight: '1등급 달성!',
+    info: '- 강남 고2 -'
+  },
+  {
+    id: 'default4',
+    category: '수능솔루션',
+    title: '6월 모의 5등급',
+    result: '수능 국어',
+    highlight: '1등급 달성!',
+    info: '- 대치 재수생 -'
+  },
+  {
+    id: 'default5',
+    category: '교과디렉션',
+    title: '국어 60점대 고정',
+    result: '기말고사',
+    highlight: '90점 돌파!',
+    info: '- 중3 학생 -'
+  },
+  {
+    id: 'default6',
+    category: '수능솔루션',
+    title: '독서 영역 취약',
+    result: '수능 국어',
+    highlight: '만점 달성!',
+    info: '- N수생 -'
+  }
+];
+
 export default function Homepage() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [banners, setBanners] = useState([]);
+  const [showBannerManager, setShowBannerManager] = useState(false);
+  const [editingBanner, setEditingBanner] = useState(null);
+  const [bannerForm, setBannerForm] = useState({
+    category: '교과디렉션',
+    title: '',
+    result: '',
+    highlight: '',
+    info: ''
+  });
+
   // 스크롤 애니메이션을 위한 ref
   const branchesRef = useRef(null);
   const programBannerRef = useRef(null);
   const contactRef = useRef(null);
   const bannerSliderRef = useRef(null);
+
+  // 관리자 확인
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.email === 'admin@test.com') {
+        setIsAdmin(true);
+      } else {
+        setIsAdmin(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 배너 데이터 불러오기
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+        const snapshot = await getDocs(q);
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        if (data.length > 0) {
+          setBanners(data);
+        } else {
+          setBanners(defaultBanners);
+        }
+      } catch (error) {
+        console.error('Error fetching banners:', error);
+        setBanners(defaultBanners);
+      }
+    };
+    fetchBanners();
+  }, []);
 
   // 스크롤 애니메이션 효과
   useEffect(() => {
@@ -22,6 +121,12 @@ export default function Homepage() {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
           entry.target.classList.add('hp-animate-visible');
+          // 카드에 흔들기 애니메이션 추가
+          if (entry.target.classList.contains('hp-animate-card')) {
+            setTimeout(() => {
+              entry.target.classList.add('hp-shake');
+            }, 800); // 올라온 후 0.8초 뒤에 흔들기
+          }
         }
       });
     };
@@ -43,12 +148,88 @@ export default function Homepage() {
     // 개별 카드들도 관찰
     const cards = document.querySelectorAll('.hp-branch-card');
     cards.forEach((card, index) => {
-      card.style.transitionDelay = `${index * 0.1}s`;
+      card.style.transitionDelay = `${index * 0.15}s`;
       observer.observe(card);
     });
 
     return () => observer.disconnect();
   }, []);
+
+  // 배너 저장
+  const handleSaveBanner = async () => {
+    if (!bannerForm.title || !bannerForm.highlight) {
+      alert('제목과 성과는 필수입니다.');
+      return;
+    }
+
+    try {
+      if (editingBanner) {
+        // 수정
+        await updateDoc(doc(db, 'banners', editingBanner.id), {
+          ...bannerForm,
+          updatedAt: new Date().toISOString()
+        });
+      } else {
+        // 추가
+        await addDoc(collection(db, 'banners'), {
+          ...bannerForm,
+          createdAt: new Date().toISOString()
+        });
+      }
+      
+      // 목록 새로고침
+      const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBanners(data.length > 0 ? data : defaultBanners);
+      
+      // 초기화
+      setEditingBanner(null);
+      setBannerForm({ category: '교과디렉션', title: '', result: '', highlight: '', info: '' });
+      alert('저장되었습니다.');
+    } catch (error) {
+      console.error('Error saving banner:', error);
+      alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 배너 삭제
+  const handleDeleteBanner = async (id) => {
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteDoc(doc(db, 'banners', id));
+      
+      // 목록 새로고침
+      const q = query(collection(db, 'banners'), orderBy('createdAt', 'asc'));
+      const snapshot = await getDocs(q);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setBanners(data.length > 0 ? data : defaultBanners);
+      
+      alert('삭제되었습니다.');
+    } catch (error) {
+      console.error('Error deleting banner:', error);
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
+  // 배너 수정 모드
+  const handleEditBanner = (banner) => {
+    setEditingBanner(banner);
+    setBannerForm({
+      category: banner.category,
+      title: banner.title,
+      result: banner.result,
+      highlight: banner.highlight,
+      info: banner.info
+    });
+  };
+
+  // 배너 폼 초기화
+  const handleCancelEdit = () => {
+    setEditingBanner(null);
+    setBannerForm({ category: '교과디렉션', title: '', result: '', highlight: '', info: '' });
+  };
 
   return (
     <div className="homepage">
@@ -79,7 +260,107 @@ export default function Homepage() {
 
       {/* 배너 슬라이더 (성적 향상 사례) */}
       <section className="hp-banner-section hp-animate-section" ref={bannerSliderRef}>
-        <BannerSlider />
+        {isAdmin && (
+          <div className="hp-banner-admin-toggle">
+            <button 
+              onClick={() => setShowBannerManager(!showBannerManager)}
+              className="hp-btn hp-btn-secondary"
+            >
+              {showBannerManager ? '배너 관리 닫기' : '⚙️ 배너 관리'}
+            </button>
+          </div>
+        )}
+
+        {/* 배너 관리 패널 (관리자 전용) */}
+        {isAdmin && showBannerManager && (
+          <div className="hp-banner-manager">
+            <h3>{editingBanner ? '배너 수정' : '새 배너 추가'}</h3>
+            
+            <div className="hp-banner-form">
+              <div className="hp-form-row">
+                <label>카테고리</label>
+                <select 
+                  value={bannerForm.category}
+                  onChange={(e) => setBannerForm({...bannerForm, category: e.target.value})}
+                >
+                  <option value="교과디렉션">교과디렉션</option>
+                  <option value="수능솔루션">수능솔루션</option>
+                </select>
+              </div>
+              
+              <div className="hp-form-row">
+                <label>상황 (전)</label>
+                <input 
+                  type="text" 
+                  value={bannerForm.title}
+                  onChange={(e) => setBannerForm({...bannerForm, title: e.target.value})}
+                  placeholder="예: 국어 모의 만년 4등급"
+                />
+              </div>
+              
+              <div className="hp-form-row">
+                <label>시험/과목</label>
+                <input 
+                  type="text" 
+                  value={bannerForm.result}
+                  onChange={(e) => setBannerForm({...bannerForm, result: e.target.value})}
+                  placeholder="예: 2023 불수능"
+                />
+              </div>
+              
+              <div className="hp-form-row">
+                <label>성과 (후)</label>
+                <input 
+                  type="text" 
+                  value={bannerForm.highlight}
+                  onChange={(e) => setBannerForm({...bannerForm, highlight: e.target.value})}
+                  placeholder="예: 2등급 안착!"
+                />
+              </div>
+              
+              <div className="hp-form-row">
+                <label>학생 정보</label>
+                <input 
+                  type="text" 
+                  value={bannerForm.info}
+                  onChange={(e) => setBannerForm({...bannerForm, info: e.target.value})}
+                  placeholder="예: - 8학군 재수생 -"
+                />
+              </div>
+              
+              <div className="hp-form-buttons">
+                <button onClick={handleSaveBanner} className="hp-btn hp-btn-primary">
+                  {editingBanner ? '수정 완료' : '추가'}
+                </button>
+                {editingBanner && (
+                  <button onClick={handleCancelEdit} className="hp-btn hp-btn-secondary">
+                    취소
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* 배너 목록 */}
+            <div className="hp-banner-list">
+              <h4>현재 배너 목록</h4>
+              {banners.map((banner, index) => (
+                <div key={banner.id} className="hp-banner-list-item">
+                  <span className="hp-banner-list-num">{index + 1}</span>
+                  <span className="hp-banner-list-category">{banner.category}</span>
+                  <span className="hp-banner-list-title">{banner.title} → {banner.highlight}</span>
+                  <div className="hp-banner-list-actions">
+                    <button onClick={() => handleEditBanner(banner)} className="hp-btn-small">수정</button>
+                    {!banner.id.startsWith('default') && (
+                      <button onClick={() => handleDeleteBanner(banner.id)} className="hp-btn-small hp-btn-danger">삭제</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <BannerSlider banners={banners} />
       </section>
 
       {/* 프로그램 소개 띠 */}

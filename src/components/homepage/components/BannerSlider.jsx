@@ -1,75 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
-// 성적 향상 사례 데이터
-const defaultBanners = [
-  {
-    id: 1,
-    category: '교과디렉션',
-    categoryColor: '#8B4513',
-    title: '2년째 국어 반타작',
-    result: '내신 원점수',
-    highlight: '30점 이상 상승!',
-    info: '- 특목고 2학년 -'
-  },
-  {
-    id: 2,
-    category: '수능솔루션',
-    categoryColor: '#8B4513',
-    title: '국어 모의 만년 4등급',
-    result: '2023 불수능',
-    highlight: '2등급 안착!',
-    info: '- 8학군 재수생 -'
-  },
-  {
-    id: 3,
-    category: '교과디렉션',
-    categoryColor: '#8B4513',
-    title: '국어 3등급 정체',
-    result: '내신 평균',
-    highlight: '1등급 달성!',
-    info: '- 강남 고2 -'
-  },
-  {
-    id: 4,
-    category: '수능솔루션',
-    categoryColor: '#8B4513',
-    title: '6월 모의 5등급',
-    result: '수능 국어',
-    highlight: '1등급 달성!',
-    info: '- 대치 재수생 -'
-  },
-  {
-    id: 5,
-    category: '교과디렉션',
-    categoryColor: '#8B4513',
-    title: '국어 60점대 고정',
-    result: '기말고사',
-    highlight: '90점 돌파!',
-    info: '- 중3 학생 -'
-  },
-  {
-    id: 6,
-    category: '수능솔루션',
-    categoryColor: '#8B4513',
-    title: '독서 영역 취약',
-    result: '수능 국어',
-    highlight: '만점 달성!',
-    info: '- N수생 -'
-  }
-];
-
-const BannerSlider = ({ banners = defaultBanners }) => {
+const BannerSlider = ({ banners = [] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   
   // 2개씩 보여주기
   const itemsPerPage = 2;
   const totalPages = Math.ceil(banners.length / itemsPerPage);
 
-  // 자동 슬라이드 (5초마다)
+  // 자동 슬라이드 (2.5초마다)
   useEffect(() => {
+    if (totalPages <= 1) return;
+    
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % totalPages);
-    }, 5000);
+    }, 2500);
     return () => clearInterval(interval);
   }, [totalPages]);
 
@@ -88,6 +32,10 @@ const BannerSlider = ({ banners = defaultBanners }) => {
   // 현재 페이지에 보여줄 배너들
   const startIndex = currentIndex * itemsPerPage;
   const visibleBanners = banners.slice(startIndex, startIndex + itemsPerPage);
+
+  if (banners.length === 0) {
+    return null;
+  }
 
   return (
     <div className="hp-banner-slider">
@@ -110,7 +58,7 @@ const BannerSlider = ({ banners = defaultBanners }) => {
               <div key={banner.id} className="hp-banner-card">
                 <div 
                   className="hp-banner-category"
-                  style={{ backgroundColor: banner.categoryColor }}
+                  style={{ backgroundColor: '#8B4513' }}
                 >
                   {banner.category}
                 </div>
@@ -154,16 +102,18 @@ const BannerSlider = ({ banners = defaultBanners }) => {
       </div>
 
       {/* 페이지 인디케이터 */}
-      <div className="hp-banner-dots">
-        {Array.from({ length: totalPages }).map((_, index) => (
-          <button
-            key={index}
-            className={`hp-banner-dot ${currentIndex === index ? 'active' : ''}`}
-            onClick={() => handleDotClick(index)}
-            aria-label={`${index + 1}번째 페이지`}
-          />
-        ))}
-      </div>
+      {totalPages > 1 && (
+        <div className="hp-banner-dots">
+          {Array.from({ length: totalPages }).map((_, index) => (
+            <button
+              key={index}
+              className={`hp-banner-dot ${currentIndex === index ? 'active' : ''}`}
+              onClick={() => handleDotClick(index)}
+              aria-label={`${index + 1}번째 페이지`}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

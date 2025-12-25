@@ -1537,6 +1537,161 @@
   transform: translateY(0);
 }
 
+/* 흔들기 애니메이션 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px) rotate(-1deg); }
+  40% { transform: translateX(6px) rotate(1deg); }
+  60% { transform: translateX(-4px) rotate(-0.5deg); }
+  80% { transform: translateX(4px) rotate(0.5deg); }
+}
+
+.hp-animate-card.hp-shake {
+  animation: shake 0.6s ease-in-out;
+}
+
+/* ===== 배너 관리 스타일 ===== */
+.hp-banner-admin-toggle {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.hp-banner-manager {
+  background: var(--hp-bg-white);
+  border: 1px solid var(--hp-border-light);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 30px;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hp-banner-manager h3 {
+  font-family: 'Noto Serif KR', serif;
+  color: var(--hp-primary-color);
+  margin-bottom: 20px;
+  font-size: 18px;
+}
+
+.hp-banner-manager h4 {
+  color: var(--hp-text-dark);
+  margin: 24px 0 12px 0;
+  font-size: 15px;
+  border-top: 1px solid var(--hp-border-light);
+  padding-top: 20px;
+}
+
+.hp-banner-form {
+  display: grid;
+  gap: 12px;
+}
+
+.hp-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hp-form-row label {
+  width: 80px;
+  font-size: 14px;
+  color: var(--hp-text-light);
+  flex-shrink: 0;
+}
+
+.hp-form-row input,
+.hp-form-row select {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--hp-border-light);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.hp-form-row input:focus,
+.hp-form-row select:focus {
+  outline: none;
+  border-color: var(--hp-secondary-color);
+}
+
+.hp-form-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.hp-banner-list {
+  margin-top: 16px;
+}
+
+.hp-banner-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--hp-bg-cream);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.hp-banner-list-num {
+  width: 24px;
+  height: 24px;
+  background: var(--hp-primary-color);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.hp-banner-list-category {
+  font-size: 12px;
+  padding: 4px 8px;
+  background: #8B4513;
+  color: white;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.hp-banner-list-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--hp-text-dark);
+}
+
+.hp-banner-list-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.hp-btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+  border: 1px solid var(--hp-border-light);
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.hp-btn-small:hover {
+  background: var(--hp-bg-cream);
+}
+
+.hp-btn-small.hp-btn-danger {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.hp-btn-small.hp-btn-danger:hover {
+  background: #fee2e2;
+}
+
 /* 카드 호버 효과 강화 */
 .hp-branch-card.hp-sub:hover {
   transform: translateY(-6px);
@@ -1690,6 +1845,14 @@
   margin-bottom: 8px;
 }
 
+.hp-simple-editor-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 16px 0;
+  display: block;
+}
+
 /* 본문에서 에디터 컨텐츠 렌더링 */
 .hp-content-body h1 {
   font-family: 'Noto Serif KR', serif;
@@ -1738,6 +1901,14 @@
 
 .hp-content-body a:hover {
   color: var(--hp-primary-color);
+}
+
+.hp-content-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 16px 0;
+  display: block;
 }
 
 /* 반응형 - 배너 슬라이더 */
