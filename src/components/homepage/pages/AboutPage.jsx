@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { db, auth } from '../../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import '../Homepage.css';
 
 export default function AboutPage() {
@@ -13,6 +15,30 @@ export default function AboutPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Quill 에디터 설정
+  const modules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'color': [] }, { 'background': [] }],
+      [{ 'align': [] }],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      ['blockquote'],
+      ['link'],
+      ['clean']
+    ],
+  };
+
+  const formats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'color', 'background',
+    'align',
+    'list', 'bullet',
+    'blockquote',
+    'link'
+  ];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -112,13 +138,19 @@ export default function AboutPage() {
                 className="hp-editor-title"
                 placeholder="제목을 입력하세요"
               />
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="hp-editor-content"
-                placeholder="내용을 입력하세요"
-                rows={15}
-              />
+              
+              {/* Rich Text Editor */}
+              <div className="hp-rich-editor-wrapper">
+                <ReactQuill
+                  theme="snow"
+                  value={editContent}
+                  onChange={setEditContent}
+                  modules={modules}
+                  formats={formats}
+                  placeholder="내용을 입력하세요..."
+                />
+              </div>
+
               <div className="hp-editor-buttons">
                 <button onClick={handleSave} className="hp-btn hp-btn-primary">저장</button>
                 <button onClick={handleCancel} className="hp-btn hp-btn-secondary">취소</button>
@@ -129,9 +161,7 @@ export default function AboutPage() {
               <h2>{title}</h2>
               <div className="hp-content-body">
                 {content ? (
-                  content.split('\n').map((line, index) => (
-                    <p key={index}>{line || <br />}</p>
-                  ))
+                  <div dangerouslySetInnerHTML={{ __html: content }} />
                 ) : (
                   <p className="hp-no-content">아직 작성된 내용이 없습니다.</p>
                 )}

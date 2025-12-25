@@ -1,8 +1,55 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import BannerSlider from './components/BannerSlider';
 import './Homepage.css';
 
 export default function Homepage() {
+  // 스크롤 애니메이션을 위한 ref
+  const branchesRef = useRef(null);
+  const programBannerRef = useRef(null);
+  const contactRef = useRef(null);
+  const bannerSliderRef = useRef(null);
+
+  // 스크롤 애니메이션 효과
+  useEffect(() => {
+    const observerOptions = {
+      root: null,
+      rootMargin: '0px',
+      threshold: 0.1
+    };
+
+    const observerCallback = (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('hp-animate-visible');
+        }
+      });
+    };
+
+    const observer = new IntersectionObserver(observerCallback, observerOptions);
+
+    // 관찰할 요소들 등록
+    const elementsToObserve = [
+      branchesRef.current,
+      programBannerRef.current,
+      contactRef.current,
+      bannerSliderRef.current
+    ];
+
+    elementsToObserve.forEach((el) => {
+      if (el) observer.observe(el);
+    });
+
+    // 개별 카드들도 관찰
+    const cards = document.querySelectorAll('.hp-branch-card');
+    cards.forEach((card, index) => {
+      card.style.transitionDelay = `${index * 0.1}s`;
+      observer.observe(card);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="homepage">
       {/* 헤더 */}
@@ -30,8 +77,13 @@ export default function Homepage() {
         <p>실전적 국어 원리로 진짜 실력을 만들어 갑니다</p>
       </section>
 
+      {/* 배너 슬라이더 (성적 향상 사례) */}
+      <section className="hp-banner-section hp-animate-section" ref={bannerSliderRef}>
+        <BannerSlider />
+      </section>
+
       {/* 프로그램 소개 띠 */}
-      <section className="hp-program-banner">
+      <section className="hp-program-banner hp-animate-section" ref={programBannerRef}>
         <div className="hp-program-banner-content">
           <p className="hp-subtitle">CONSULTING PROGRAM</p>
           <h2>오늘의 국어 연구소에서 만들었습니다.</h2>
@@ -41,11 +93,11 @@ export default function Homepage() {
       </section>
 
       {/* 지점 섹션 */}
-      <section className="hp-branches">
+      <section className="hp-branches hp-animate-section" ref={branchesRef}>
         {/* 가로 3개: 광진원 - 연구소 - 배곧원 */}
         <div className="hp-branches-row">
           {/* 광진원 */}
-          <a href="https://m.blog.naver.com/today_personal" target="_blank" rel="noopener noreferrer" className="hp-branch-card hp-sub">
+          <a href="https://m.blog.naver.com/today_personal" target="_blank" rel="noopener noreferrer" className="hp-branch-card hp-sub hp-animate-card">
             <div className="hp-icon">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
@@ -63,7 +115,7 @@ export default function Homepage() {
           </a>
 
           {/* 대치 연구소 - 클릭 가능 */}
-          <Link to="/daechi" className="hp-branch-card hp-main hp-clickable">
+          <Link to="/daechi" className="hp-branch-card hp-main hp-clickable hp-animate-card">
             <div className="hp-icon">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
@@ -76,7 +128,7 @@ export default function Homepage() {
           </Link>
 
           {/* 배곧원 */}
-          <a href="https://m.blog.naver.com/today_korea" target="_blank" rel="noopener noreferrer" className="hp-branch-card hp-sub">
+          <a href="https://m.blog.naver.com/today_korea" target="_blank" rel="noopener noreferrer" className="hp-branch-card hp-sub hp-animate-card">
             <div className="hp-icon">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
@@ -97,7 +149,7 @@ export default function Homepage() {
         {/* 청년다락방 - 클릭 가능 */}
         <div className="hp-branch-bottom">
           <div className="hp-connector-line"></div>
-          <Link to="/darakbang" className="hp-branch-card hp-mini hp-clickable">
+          <Link to="/darakbang" className="hp-branch-card hp-mini hp-clickable hp-animate-card">
             <p className="hp-mini-line">오늘의 국어가 실천하는</p>
             <p className="hp-mini-line">사회적 가치 창조 공간</p>
             <p className="hp-mini-line hp-mini-highlight">청년 다락방</p>
@@ -106,7 +158,7 @@ export default function Homepage() {
       </section>
 
       {/* 연락처 */}
-      <section className="hp-contact">
+      <section className="hp-contact hp-animate-section" ref={contactRef}>
         <h2>궁금한 점은 언제나 문의해 주세요</h2>
         <div className="hp-contact-info">
           <div className="hp-phone-number">02-562-5559</div>

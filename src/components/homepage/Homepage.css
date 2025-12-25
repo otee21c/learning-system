@@ -1358,3 +1358,328 @@
   margin-left: 8px;
   font-size: 14px;
 }
+
+/* ===== 배너 슬라이더 스타일 ===== */
+.hp-banner-section {
+  padding: 50px 20px;
+  background: var(--hp-bg-white);
+}
+
+.hp-banner-slider {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.hp-banner-slider-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.hp-banner-arrow {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: var(--hp-bg-cream);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.hp-banner-arrow:hover {
+  background: var(--hp-primary-color);
+}
+
+.hp-banner-arrow svg {
+  width: 24px;
+  height: 24px;
+  fill: var(--hp-text-light);
+  transition: fill 0.3s ease;
+}
+
+.hp-banner-arrow:hover svg {
+  fill: white;
+}
+
+.hp-banner-cards {
+  display: flex;
+  gap: 30px;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.hp-banner-cards.hp-banner-animating {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.hp-banner-card {
+  width: 280px;
+  background: var(--hp-bg-white);
+  border: 1px solid var(--hp-border-light);
+  border-radius: 16px;
+  padding: 30px 24px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+.hp-banner-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+}
+
+.hp-banner-category {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.hp-banner-title {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 18px;
+  color: var(--hp-text-dark);
+  margin-bottom: 16px;
+}
+
+.hp-banner-arrow-down {
+  margin: 12px 0;
+}
+
+.hp-banner-arrow-down svg {
+  width: 32px;
+  height: 32px;
+  fill: #ccc;
+}
+
+.hp-banner-result {
+  font-size: 15px;
+  color: var(--hp-text-dark);
+  margin-bottom: 4px;
+}
+
+.hp-banner-highlight {
+  font-size: 20px;
+  font-weight: 700;
+  color: #c41e3a;
+  margin-bottom: 16px;
+}
+
+.hp-banner-info {
+  font-size: 13px;
+  color: var(--hp-text-light);
+  margin-bottom: 16px;
+}
+
+.hp-banner-logo {
+  margin-top: 8px;
+}
+
+.hp-banner-logo svg {
+  opacity: 0.6;
+}
+
+/* 페이지 인디케이터 (점) */
+.hp-banner-dots {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.hp-banner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: var(--hp-border-light);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.hp-banner-dot.active {
+  background: var(--hp-primary-color);
+  transform: scale(1.2);
+}
+
+.hp-banner-dot:hover {
+  background: var(--hp-secondary-color);
+}
+
+/* ===== 스크롤 애니메이션 ===== */
+.hp-animate-section {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.hp-animate-section.hp-animate-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hp-animate-card {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+}
+
+.hp-animate-card.hp-animate-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 카드 호버 효과 강화 */
+.hp-branch-card.hp-sub:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+  border-color: var(--hp-secondary-color);
+  background: linear-gradient(180deg, var(--hp-bg-white) 0%, rgba(90, 143, 123, 0.05) 100%);
+}
+
+.hp-branch-card.hp-main:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(201, 169, 98, 0.25);
+  background: linear-gradient(180deg, var(--hp-bg-white) 0%, rgba(201, 169, 98, 0.05) 100%);
+}
+
+.hp-branch-card.hp-mini:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(44, 74, 62, 0.4);
+}
+
+/* ===== Rich Text Editor 스타일 ===== */
+.hp-rich-editor-wrapper {
+  margin-bottom: 16px;
+}
+
+.hp-rich-editor-wrapper .ql-container {
+  min-height: 300px;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.hp-rich-editor-wrapper .ql-toolbar {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  background: #f8f9fa;
+}
+
+.hp-rich-editor-wrapper .ql-editor {
+  min-height: 280px;
+  line-height: 1.8;
+}
+
+.hp-rich-editor-wrapper .ql-editor p {
+  margin-bottom: 12px;
+}
+
+.hp-rich-editor-wrapper .ql-editor h1 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 28px;
+  color: var(--hp-primary-color);
+  margin-bottom: 16px;
+}
+
+.hp-rich-editor-wrapper .ql-editor h2 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 22px;
+  color: var(--hp-primary-color);
+  margin-bottom: 14px;
+}
+
+.hp-rich-editor-wrapper .ql-editor h3 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 18px;
+  color: var(--hp-primary-color);
+  margin-bottom: 12px;
+}
+
+.hp-rich-editor-wrapper .ql-editor blockquote {
+  border-left: 4px solid var(--hp-primary-color);
+  padding-left: 16px;
+  margin: 16px 0;
+  color: var(--hp-text-light);
+  font-style: italic;
+}
+
+/* 본문에서 에디터 컨텐츠 렌더링 */
+.hp-content-body h1 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 28px;
+  color: var(--hp-primary-color);
+  margin-bottom: 16px;
+}
+
+.hp-content-body h2 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 22px;
+  color: var(--hp-primary-color);
+  margin-bottom: 14px;
+}
+
+.hp-content-body h3 {
+  font-family: 'Noto Serif KR', serif;
+  font-size: 18px;
+  color: var(--hp-primary-color);
+  margin-bottom: 12px;
+}
+
+.hp-content-body blockquote {
+  border-left: 4px solid var(--hp-primary-color);
+  padding-left: 16px;
+  margin: 16px 0;
+  color: var(--hp-text-light);
+  font-style: italic;
+}
+
+.hp-content-body ul,
+.hp-content-body ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.hp-content-body li {
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+
+.hp-content-body a {
+  color: var(--hp-secondary-color);
+  text-decoration: underline;
+}
+
+.hp-content-body a:hover {
+  color: var(--hp-primary-color);
+}
+
+/* 반응형 - 배너 슬라이더 */
+@media (max-width: 768px) {
+  .hp-banner-cards {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .hp-banner-card {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .hp-banner-arrow {
+    display: none;
+  }
+
+  .hp-banner-slider-container {
+    flex-direction: column;
+  }
+}
