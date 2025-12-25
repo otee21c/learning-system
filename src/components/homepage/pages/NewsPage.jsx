@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db, auth, storage } from '../../../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy, query } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { onAuthStateChanged } from 'firebase/auth';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import RichTextEditor from '../components/RichTextEditor';
 import '../Homepage.css';
 
 export default function NewsPage() {
@@ -21,30 +20,6 @@ export default function NewsPage() {
   // 이미지 관련 상태
   const [editThumbnail, setEditThumbnail] = useState(null);
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
-
-  // Quill 에디터 설정
-  const modules = useMemo(() => ({
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'align': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['blockquote'],
-      ['link'],
-      ['clean']
-    ],
-  }), []);
-
-  const formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
-    'color', 'background',
-    'align',
-    'list', 'bullet',
-    'blockquote',
-    'link'
-  ];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -284,16 +259,11 @@ export default function NewsPage() {
               </div>
 
               {/* Rich Text Editor */}
-              <div className="hp-rich-editor-wrapper">
-                <ReactQuill
-                  theme="snow"
-                  value={editContent}
-                  onChange={setEditContent}
-                  modules={modules}
-                  formats={formats}
-                  placeholder="내용을 입력하세요..."
-                />
-              </div>
+              <RichTextEditor
+                value={editContent}
+                onChange={setEditContent}
+                placeholder="내용을 입력하세요..."
+              />
 
               <div className="hp-editor-buttons">
                 <button onClick={handleSave} className="hp-btn hp-btn-primary">저장</button>

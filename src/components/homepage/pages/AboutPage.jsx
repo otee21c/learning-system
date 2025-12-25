@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom';
 import { db, auth } from '../../../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import RichTextEditor from '../components/RichTextEditor';
 import '../Homepage.css';
 
 export default function AboutPage() {
@@ -15,30 +14,6 @@ export default function AboutPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
   const [loading, setLoading] = useState(true);
-
-  // Quill 에디터 설정
-  const modules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'align': [] }],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['blockquote'],
-      ['link'],
-      ['clean']
-    ],
-  };
-
-  const formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
-    'color', 'background',
-    'align',
-    'list', 'bullet',
-    'blockquote',
-    'link'
-  ];
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -140,16 +115,11 @@ export default function AboutPage() {
               />
               
               {/* Rich Text Editor */}
-              <div className="hp-rich-editor-wrapper">
-                <ReactQuill
-                  theme="snow"
-                  value={editContent}
-                  onChange={setEditContent}
-                  modules={modules}
-                  formats={formats}
-                  placeholder="내용을 입력하세요..."
-                />
-              </div>
+              <RichTextEditor
+                value={editContent}
+                onChange={setEditContent}
+                placeholder="내용을 입력하세요..."
+              />
 
               <div className="hp-editor-buttons">
                 <button onClick={handleSave} className="hp-btn hp-btn-primary">저장</button>
