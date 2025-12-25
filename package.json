@@ -19,6 +19,7 @@
     "openai": "^6.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-quill": "^2.0.0",
     "react-router-dom": "^7.1.1",
     "tesseract.js": "^6.0.1"
   },
