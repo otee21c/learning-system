@@ -25,21 +25,31 @@ export default function OMRBatchGrading({ exams, students }) {
     studentId: '',
     examType: '', // 시험 유형
     maxScore: 100, // 기본 만점
-    score: ''
+    score: '',
+    note: '' // 비고 (결석, 기타 사유 등)
   });
 
   // 수동 성적 기록 저장
   const handleManualScoreSave = async () => {
-    if (!manualScore.studentId || !manualScore.examType || !manualScore.score) {
-      alert('모든 항목을 입력해주세요.');
+    // 학생과 시험은 필수
+    if (!manualScore.studentId || !manualScore.examType) {
+      alert('학생과 시험을 선택해주세요.');
+      return;
+    }
+    
+    // 점수나 비고 중 하나는 입력해야 함
+    if (!manualScore.score && !manualScore.note) {
+      alert('점수 또는 비고를 입력해주세요.');
       return;
     }
 
-    const score = parseInt(manualScore.score);
+    const hasScore = manualScore.score && manualScore.score.trim() !== '';
+    const score = hasScore ? parseInt(manualScore.score) : 0;
     const maxScore = parseInt(manualScore.maxScore);
 
-    if (score < 0 || score > maxScore) {
-      alert(`점수는 0점에서 ${maxScore}점 사이여야 합니다.`);
+    // 점수가 입력된 경우에만 범위 검증
+    if (hasScore && (isNaN(score) || score < 0 || score > maxScore)) {
+      alert(`점수는 0점에서 ${maxScore}점 사이의 숫자여야 합니다.`);
       return;
     }
 
@@ -57,13 +67,14 @@ export default function OMRBatchGrading({ exams, students }) {
           examTitle: manualScore.examType,
           examType: manualScore.examType, // 시험 유형 저장
           date: new Date().toISOString().split('T')[0],
-          totalScore: score,
+          totalScore: hasScore ? score : null,
           maxScore: maxScore,
-          percentage: ((score / maxScore) * 100).toFixed(1),
+          percentage: hasScore ? ((score / maxScore) * 100).toFixed(1) : null,
+          note: manualScore.note || '', // 비고 저장
           results: [], // 수동 입력이므로 문항별 결과 없음
           typeStats: {},
           weakTypes: [],
-          feedback: '수동으로 입력된 성적입니다.',
+          feedback: manualScore.note || '수동으로 입력된 성적입니다.',
           manualEntry: true, // 수동 입력 표시
           month: selectedMonth, // 월 정보 저장
           week: selectedWeek // 주차 정보 저장
@@ -75,7 +86,7 @@ export default function OMRBatchGrading({ exams, students }) {
           exams: updatedExams
         });
         
-        setManualScore({ studentId: '', examType: '', maxScore: 100, score: '' });
+        setManualScore({ studentId: '', examType: '', maxScore: 100, score: '', note: '' });
         alert('성적이 기록되었습니다!');
       } else {
         alert('학생을 찾을 수 없습니다.');
@@ -355,7 +366,7 @@ export default function OMRBatchGrading({ exams, students }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* 학생 선택 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -396,7 +407,7 @@ export default function OMRBatchGrading({ exams, students }) {
           {/* 점수 입력 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              점수 입력 *
+              점수 입력
               {manualScore.examType && (
                 <span className="text-xs text-gray-500 ml-1">
                   (최대 {manualScore.maxScore}점)
@@ -413,11 +424,26 @@ export default function OMRBatchGrading({ exams, students }) {
               max={manualScore.maxScore}
             />
           </div>
+
+          {/* 비고 입력 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              비고
+              <span className="text-xs text-gray-500 ml-1">(결석, 사유 등)</span>
+            </label>
+            <input
+              type="text"
+              value={manualScore.note}
+              onChange={(e) => setManualScore({ ...manualScore, note: e.target.value })}
+              placeholder="예: 결석, 조퇴"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
         </div>
 
         <button
           onClick={handleManualScoreSave}
-          disabled={!manualScore.studentId || !manualScore.examType || !manualScore.score}
+          disabled={!manualScore.studentId || !manualScore.examType || (!manualScore.score && !manualScore.note)}
           className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg hover:shadow-lg transition-all font-semibold disabled:from-gray-300 disabled:to-gray-400 flex items-center justify-center gap-2"
         >
           <Save size={20} />

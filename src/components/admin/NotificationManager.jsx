@@ -192,7 +192,7 @@ export default function NotificationManager() {
       additionalMsg = message
     } = options;
 
-    let content = `★ ${student.name} 학생 알림장\n\n`;
+    let content = `오늘의 국어_${student.name}_${month}월 ${week}주차\n\n`;
 
     // 커리큘럼
     if (includeCurr && curriculumList.length > 0) {
@@ -233,17 +233,25 @@ export default function NotificationManager() {
       }
     }
 
-    // 최근 시험 결과
+    // 해당 월/주차 시험 결과
     if (includeEx) {
-      const recentExam = student.exams && student.exams.length > 0 
-        ? student.exams[student.exams.length - 1] 
-        : null;
+      // 해당 월/주차에 기록된 시험 찾기
+      const weekExams = student.exams?.filter(exam => 
+        exam.month === month && exam.week === week
+      ) || [];
       
-      content += '★ 최근 시험 결과\n';
-      if (recentExam) {
-        content += `- 시험명: ${recentExam.examTitle}\n`;
-        content += `- 점수: ${recentExam.totalScore}점 / ${recentExam.maxScore}점 (${recentExam.percentage}%)\n`;
-        content += `- 날짜: ${recentExam.date}\n\n`;
+      content += `★ ${month}월 ${week}주차 시험 결과\n`;
+      if (weekExams.length > 0) {
+        weekExams.forEach(exam => {
+          content += `- 시험명: ${exam.examTitle}\n`;
+          // 비고가 있으면 비고 표시, 없으면 점수 표시
+          if (exam.note) {
+            content += `- 비고: ${exam.note}\n`;
+          } else {
+            content += `- 점수: ${exam.totalScore}점 / ${exam.maxScore}점 (${exam.percentage}%)\n`;
+          }
+        });
+        content += '\n';
       } else {
         content += '- 등록된 시험 결과가 없습니다.\n\n';
       }
@@ -281,7 +289,7 @@ export default function NotificationManager() {
 
     // 추가 메시지
     if (additionalMsg && additionalMsg.trim()) {
-      content += '● 선생님 메시지\n';
+      content += '♥ 선생님 메시지\n';
       content += additionalMsg + '\n';
     }
 
