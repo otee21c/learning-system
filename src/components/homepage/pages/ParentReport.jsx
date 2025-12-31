@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../firebase';
 import { 
   User, Phone, Search, TrendingUp, BookOpen, CheckCircle, 
   BarChart3, Calendar, ChevronDown, ChevronUp, FileText,
-  Target, Award, Clock, AlertCircle, Filter
+  Target, Award, Clock, AlertCircle, Filter, Home
 } from 'lucide-react';
 
 export default function ParentReport() {
+  // URL 파라미터 읽기
+  const [searchParams] = useSearchParams();
+  const urlStartMonth = searchParams.get('start');
+  const urlEndMonth = searchParams.get('end');
+  
+  // URL에 기간이 설정되어 있으면 그 값 사용, 아니면 기본값
+  const hasUrlPeriod = urlStartMonth && urlEndMonth;
+
   // 로그인 상태
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginForm, setLoginForm] = useState({ studentName: '', parentPhone: '' });
@@ -23,9 +32,9 @@ export default function ParentReport() {
   const [memoData, setMemoData] = useState([]);
   const [homeworkData, setHomeworkData] = useState([]);
 
-  // 기간 선택
-  const [startMonth, setStartMonth] = useState(1);
-  const [endMonth, setEndMonth] = useState(12);
+  // 기간 선택 (URL 파라미터 우선)
+  const [startMonth, setStartMonth] = useState(urlStartMonth ? parseInt(urlStartMonth) : 1);
+  const [endMonth, setEndMonth] = useState(urlEndMonth ? parseInt(urlEndMonth) : 12);
   const currentYear = new Date().getFullYear();
 
   // 확장된 행
@@ -64,10 +73,12 @@ export default function ParentReport() {
       setStudent(foundStudent);
       setIsLoggedIn(true);
 
-      // 현재 월 기준으로 기간 설정
-      const currentMonth = new Date().getMonth() + 1;
-      setStartMonth(Math.max(1, currentMonth - 2));
-      setEndMonth(currentMonth);
+      // URL 파라미터가 없으면 현재 월 기준으로 기간 설정
+      if (!hasUrlPeriod) {
+        const currentMonth = new Date().getMonth() + 1;
+        setStartMonth(Math.max(1, currentMonth - 2));
+        setEndMonth(currentMonth);
+      }
 
       // 관련 데이터 로드
       await loadStudentData(foundStudent.id);
@@ -244,12 +255,28 @@ export default function ParentReport() {
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-teal-200 rounded-full opacity-30 translate-x-1/3 translate-y-1/3" />
         
         <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full relative z-10">
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
+          {/* 홈페이지 돌아가기 버튼 */}
+          <Link 
+            to="/"
+            className="absolute top-4 left-4 flex items-center gap-1 text-gray-500 hover:text-emerald-600 transition text-sm"
+          >
+            <Home size={16} />
+            <span>홈으로</span>
+          </Link>
+
+          <h1 className="text-2xl font-bold text-center text-gray-800 mb-2 mt-4">
             학습 보고서 확인
           </h1>
           <p className="text-center text-gray-500 mb-6 text-sm">
             오늘의 국어 연구소
           </p>
+
+          {/* URL 파라미터로 기간이 설정된 경우 안내 */}
+          {hasUrlPeriod && (
+            <div className="mb-4 p-3 bg-emerald-50 rounded-lg text-sm text-emerald-700 text-center">
+              📅 조회 기간: {urlStartMonth}월 ~ {urlEndMonth}월
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>
@@ -331,47 +358,69 @@ export default function ParentReport() {
             <h1 className="text-xl font-bold text-gray-800">학습 보고서</h1>
             <p className="text-sm text-gray-500">오늘의 국어 연구소</p>
           </div>
-          <button
-            onClick={() => {
-              setIsLoggedIn(false);
-              setStudent(null);
-            }}
-            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
-          >
-            로그아웃
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/"
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition flex items-center gap-1"
+            >
+              <Home size={16} />
+              홈으로
+            </Link>
+            <button
+              onClick={() => {
+                setIsLoggedIn(false);
+                setStudent(null);
+              }}
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* 기간 선택 */}
+        {/* 기간 표시 (URL 파라미터가 있으면 수정 불가) */}
         <div className="bg-white rounded-2xl shadow-lg p-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Filter size={18} className="text-gray-500" />
               <span className="text-sm font-medium text-gray-700">조회 기간:</span>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={startMonth}
-                onChange={(e) => setStartMonth(Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={m}>{m}월</option>
-                ))}
-              </select>
-              <span className="text-gray-500">~</span>
-              <select
-                value={endMonth}
-                onChange={(e) => setEndMonth(Number(e.target.value))}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                  <option key={m} value={m}>{m}월</option>
-                ))}
-              </select>
-            </div>
+            
+            {hasUrlPeriod ? (
+              // URL 파라미터로 기간이 설정된 경우 - 읽기 전용
+              <div className="flex items-center gap-2">
+                <span className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium">
+                  {startMonth}월 ~ {endMonth}월
+                </span>
+                <span className="text-xs text-gray-400">(선생님이 설정한 기간)</span>
+              </div>
+            ) : (
+              // URL 파라미터 없으면 직접 선택 가능
+              <div className="flex items-center gap-2">
+                <select
+                  value={startMonth}
+                  onChange={(e) => setStartMonth(Number(e.target.value))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                    <option key={m} value={m}>{m}월</option>
+                  ))}
+                </select>
+                <span className="text-gray-500">~</span>
+                <select
+                  value={endMonth}
+                  onChange={(e) => setEndMonth(Number(e.target.value))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                    <option key={m} value={m}>{m}월</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
             <div className="text-right flex-1">
               <p className="font-medium text-gray-800">{student?.name} 학생</p>
               <p className="text-sm text-gray-500">{student?.grade} · {student?.school || '-'}</p>
