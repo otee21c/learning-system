@@ -30,6 +30,7 @@ import MyGrades from './components/student/MyGrades';
 import HomeworkSubmission from './components/student/HomeworkSubmission';
 import ConceptQuestion from './components/student/ConceptQuestion';
 import ProblemSolving from './components/student/ProblemSolving';
+import VideoLearning from './components/student/VideoLearning';
 
 // Common
 import Navigation from './components/common/Navigation';
@@ -213,6 +214,7 @@ export default function App() {
             <>
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
               {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
+              {activeTab === 'video-learning' && <VideoLearning currentUser={currentUser} />}
               {activeTab === 'concept-question' && <ConceptQuestion currentUser={currentUser} />}
               {activeTab === 'problem-solving' && <ProblemSolving currentUser={currentUser} />}
               {activeTab === 'mypage' && <MyGrades currentUser={currentUser} />}

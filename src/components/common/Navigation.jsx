@@ -20,10 +20,11 @@ export default function Navigation({ currentUser, activeTab, setActiveTab }) {
     { id: 'learning-materials', label: '학습자료', icon: FolderOpen },
   ];
 
-  // 학생 탭 메뉴 - 문제 분석 제거
+  // 학생 탭 메뉴
   const studentTabs = [
     { id: 'exam', label: '시험 보기', icon: FileText },
     { id: 'homework', label: '숙제', icon: BookOpen },
+    { id: 'video-learning', label: '동영상 학습', icon: Video },
     { id: 'concept-question', label: '개념과 지문', icon: MessageCircle },
     { id: 'problem-solving', label: '문제 풀이', icon: HelpCircle },
     { id: 'mypage', label: '내 성적', icon: User },

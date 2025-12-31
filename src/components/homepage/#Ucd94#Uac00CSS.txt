@@ -1,0 +1,8 @@
+/* ===== Homepage.css 맨 아래에 추가할 스타일 ===== */
+
+/* 푸터 전화번호 스타일 */
+.hp-footer-phone {
+  font-size: 14px;
+  margin: 12px 0;
+  opacity: 0.95;
+}
