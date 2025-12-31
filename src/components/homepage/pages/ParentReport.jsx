@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { db } from '../../../firebase';
 import { 
   User, Phone, Search, TrendingUp, BookOpen, CheckCircle, 
   BarChart3, Calendar, ChevronDown, ChevronUp, FileText,
