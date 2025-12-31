@@ -4,7 +4,7 @@ import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc } from 'firebase
 import { db } from '../../firebase';
 import { getMonthWeek } from '../../utils/dateUtils';
 
-export default function ExamManager({ exams, students }) {
+export default function ExamManager({ exams, students, branch }) {
   const [newExam, setNewExam] = useState({
     title: '',
     date: '',

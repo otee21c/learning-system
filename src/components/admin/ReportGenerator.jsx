@@ -5,7 +5,7 @@ import { FileText, Download, Image, Calendar, User, ChevronDown, ChevronUp, Save
 import html2canvas from 'html2canvas';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-const ReportGenerator = ({ students = [] }) => {
+const ReportGenerator = ({ students = [], branch }) => {
   const reportRef = useRef(null);
   const todayMonthWeek = getTodayMonthWeek();
 

@@ -4,7 +4,7 @@ import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-export default function OMRBatchGrading({ exams, students }) {
+export default function OMRBatchGrading({ exams, students, branch }) {
   // 월/주차 선택 (기본값: 현재 월/주차)
   const todayMonthWeek = getTodayMonthWeek();
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);

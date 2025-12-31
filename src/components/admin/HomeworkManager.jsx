@@ -47,11 +47,11 @@ const sendSMS = async (phoneNumber, message) => {
 };
 // 과제 관리 컴포넌트
 
-const HomeworkManager = () => {
+const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const [assignments, setAssignments] = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]);
-  const [students, setStudents] = useState([]);
+  const [students, setStudents] = useState(propStudents);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newAssignment, setNewAssignment] = useState({
@@ -60,10 +60,14 @@ const HomeworkManager = () => {
     dueDate: ''
   });
 
+  // props로 받은 학생 목록이 변경되면 업데이트
+  useEffect(() => {
+    setStudents(propStudents);
+  }, [propStudents]);
+
   // 과제 목록 불러오기
   useEffect(() => {
     loadAssignments();
-    loadStudents();
   }, []);
 
   const loadAssignments = async () => {

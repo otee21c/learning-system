@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
-const StudentDashboard = ({ students = [] }) => {
+const StudentDashboard = ({ students = [], branch }) => {
   const todayMonthWeek = getTodayMonthWeek();
   
   // 필터 상태

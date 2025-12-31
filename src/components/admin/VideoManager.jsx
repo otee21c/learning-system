@@ -3,7 +3,7 @@ import { Video, Plus, Trash2, Users, Eye, Check, X, Play, Clock, UserCheck, Sear
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase';
 
-export default function VideoManager({ videos, students = [] }) {
+export default function VideoManager({ videos, students = [], branch }) {
   // 새 동영상 추가
   const [newVideo, setNewVideo] = useState({ 
     subject: '', 
