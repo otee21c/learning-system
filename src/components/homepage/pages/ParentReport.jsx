@@ -12,9 +12,11 @@ export default function ParentReport() {
   // URL 파라미터 읽기
   const [searchParams] = useSearchParams();
   const urlStartMonth = searchParams.get('start');
+  const urlStartWeek = searchParams.get('startWeek');
   const urlEndMonth = searchParams.get('end');
+  const urlEndWeek = searchParams.get('endWeek');
   
-  // URL에 기간이 설정되어 있으면 그 값 사용, 아니면 기본값
+  // URL에 기간이 설정되어 있으면 그 값 사용
   const hasUrlPeriod = urlStartMonth && urlEndMonth;
 
   // 로그인 상태
@@ -32,13 +34,22 @@ export default function ParentReport() {
   const [memoData, setMemoData] = useState([]);
   const [homeworkData, setHomeworkData] = useState([]);
 
-  // 기간 선택 (URL 파라미터 우선)
+  // 기간 선택 (URL 파라미터 우선) - 주차 포함
   const [startMonth, setStartMonth] = useState(urlStartMonth ? parseInt(urlStartMonth) : 1);
+  const [startWeek, setStartWeek] = useState(urlStartWeek ? parseInt(urlStartWeek) : 1);
   const [endMonth, setEndMonth] = useState(urlEndMonth ? parseInt(urlEndMonth) : 12);
-  const currentYear = new Date().getFullYear();
+  const [endWeek, setEndWeek] = useState(urlEndWeek ? parseInt(urlEndWeek) : 5);
 
   // 확장된 행
   const [expandedRows, setExpandedRows] = useState({});
+
+  // 기간 비교 함수 (월/주차 기준)
+  const isInPeriod = (month, week) => {
+    const itemValue = month * 10 + (week || 1);
+    const startValue = startMonth * 10 + startWeek;
+    const endValue = endMonth * 10 + endWeek;
+    return itemValue >= startValue && itemValue <= endValue;
+  };
 
   // 로그인 처리
   const handleLogin = async () => {
@@ -76,8 +87,10 @@ export default function ParentReport() {
       // URL 파라미터가 없으면 현재 월 기준으로 기간 설정
       if (!hasUrlPeriod) {
         const currentMonth = new Date().getMonth() + 1;
-        setStartMonth(Math.max(1, currentMonth - 2));
+        setStartMonth(Math.max(1, currentMonth - 1));
+        setStartWeek(1);
         setEndMonth(currentMonth);
+        setEndWeek(5);
       }
 
       // 관련 데이터 로드
@@ -127,30 +140,22 @@ export default function ParentReport() {
     }
   };
 
-  // 선택한 기간의 데이터 필터링
+  // 선택한 기간의 데이터 필터링 (주차 포함)
   const getFilteredExams = () => {
     if (!student?.exams) return [];
-    return student.exams.filter(e => 
-      e.month >= startMonth && e.month <= endMonth
-    );
+    return student.exams.filter(e => isInPeriod(e.month, e.week));
   };
 
   const getFilteredAttendance = () => {
-    return attendanceData.filter(a => 
-      a.month >= startMonth && a.month <= endMonth
-    );
+    return attendanceData.filter(a => isInPeriod(a.month, a.week));
   };
 
   const getFilteredHomework = () => {
-    return homeworkData.filter(h => 
-      h.month >= startMonth && h.month <= endMonth
-    );
+    return homeworkData.filter(h => isInPeriod(h.month, h.week));
   };
 
   const getFilteredMemos = () => {
-    return memoData.filter(m => 
-      m.month >= startMonth && m.month <= endMonth
-    );
+    return memoData.filter(m => isInPeriod(m.month, m.week));
   };
 
   // 통계 계산 (기간 필터 적용)
@@ -246,6 +251,14 @@ export default function ParentReport() {
       });
   };
 
+  // 기간 표시 텍스트
+  const getPeriodText = () => {
+    if (startMonth === endMonth && startWeek === endWeek) {
+      return `${startMonth}월 ${startWeek}주차`;
+    }
+    return `${startMonth}월 ${startWeek}주차 ~ ${endMonth}월 ${endWeek}주차`;
+  };
+
   // 로그인 화면
   if (!isLoggedIn) {
     return (
@@ -274,7 +287,7 @@ export default function ParentReport() {
           {/* URL 파라미터로 기간이 설정된 경우 안내 */}
           {hasUrlPeriod && (
             <div className="mb-4 p-3 bg-emerald-50 rounded-lg text-sm text-emerald-700 text-center">
-              📅 조회 기간: {urlStartMonth}월 ~ {urlEndMonth}월
+              📅 조회 기간: {startMonth}월 {startWeek}주차 ~ {endMonth}월 {endWeek}주차
             </div>
           )}
 
@@ -380,7 +393,7 @@ export default function ParentReport() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* 기간 표시 (URL 파라미터가 있으면 수정 불가) */}
+        {/* 기간 표시 */}
         <div className="bg-white rounded-2xl shadow-lg p-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -392,32 +405,54 @@ export default function ParentReport() {
               // URL 파라미터로 기간이 설정된 경우 - 읽기 전용
               <div className="flex items-center gap-2">
                 <span className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-medium">
-                  {startMonth}월 ~ {endMonth}월
+                  {getPeriodText()}
                 </span>
                 <span className="text-xs text-gray-400">(선생님이 설정한 기간)</span>
               </div>
             ) : (
               // URL 파라미터 없으면 직접 선택 가능
-              <div className="flex items-center gap-2">
-                <select
-                  value={startMonth}
-                  onChange={(e) => setStartMonth(Number(e.target.value))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                >
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                    <option key={m} value={m}>{m}월</option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <select
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(Number(e.target.value))}
+                    className="px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                  >
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                      <option key={m} value={m}>{m}월</option>
+                    ))}
+                  </select>
+                  <select
+                    value={startWeek}
+                    onChange={(e) => setStartWeek(Number(e.target.value))}
+                    className="px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                  >
+                    {[1,2,3,4,5].map(w => (
+                      <option key={w} value={w}>{w}주차</option>
+                    ))}
+                  </select>
+                </div>
                 <span className="text-gray-500">~</span>
-                <select
-                  value={endMonth}
-                  onChange={(e) => setEndMonth(Number(e.target.value))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                >
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                    <option key={m} value={m}>{m}월</option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1">
+                  <select
+                    value={endMonth}
+                    onChange={(e) => setEndMonth(Number(e.target.value))}
+                    className="px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                  >
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                      <option key={m} value={m}>{m}월</option>
+                    ))}
+                  </select>
+                  <select
+                    value={endWeek}
+                    onChange={(e) => setEndWeek(Number(e.target.value))}
+                    className="px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 text-sm"
+                  >
+                    {[1,2,3,4,5].map(w => (
+                      <option key={w} value={w}>{w}주차</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
             
@@ -453,7 +488,8 @@ export default function ParentReport() {
 
             <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center">
               <p className="text-sm font-medium text-orange-600 mb-2">조회 기간</p>
-              <p className="text-2xl font-bold text-orange-600">{startMonth}~{endMonth}월</p>
+              <p className="text-lg font-bold text-orange-600">{startMonth}월{startWeek}주</p>
+              <p className="text-lg font-bold text-orange-600">~{endMonth}월{endWeek}주</p>
             </div>
           </div>
         </div>
@@ -626,7 +662,7 @@ export default function ParentReport() {
           </h2>
           <div className="bg-purple-50 rounded-xl p-4">
             <p className="text-gray-700 leading-relaxed">
-              <strong>{student?.name}</strong> 학생의 {startMonth}월~{endMonth}월 학습 현황입니다.
+              <strong>{student?.name}</strong> 학생의 {getPeriodText()} 학습 현황입니다.
               <br /><br />
               • 출석률 <strong>{stats?.attendanceRate}%</strong> ({stats?.totalClasses}회 수업)
               <br />
