@@ -114,7 +114,8 @@
 }
 
 .hp-dropdown-menu {
-  display: none;
+  visibility: hidden;
+  opacity: 0;
   position: absolute;
   top: 100%;
   right: 0;
@@ -125,12 +126,15 @@
   padding: 8px 0;
   margin-top: 8px;
   z-index: 1000;
+  display: flex;
   flex-direction: column;
   gap: 0;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
 .hp-dropdown:hover .hp-dropdown-menu {
-  display: flex;
+  visibility: visible;
+  opacity: 1;
 }
 
 .hp-dropdown-menu li {

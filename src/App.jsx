@@ -195,7 +195,7 @@ export default function App() {
               {activeTab === 'dashboard' && <StudentDashboard students={students} />}
               {activeTab === 'students' && <StudentManager students={students} />}
               {activeTab === 'exams' && <ExamManager exams={exams} students={students} />}
-              {activeTab === 'videos' && <VideoManager videos={videos} />}
+              {activeTab === 'videos' && <VideoManager videos={videos} students={students} />}
               {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} />}
               {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} />}
               {activeTab === 'homework' && <HomeworkManager students={students} />}

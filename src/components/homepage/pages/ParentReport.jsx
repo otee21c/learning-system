@@ -4,7 +4,7 @@ import { db } from '../../../firebase';
 import { 
   User, Phone, Search, TrendingUp, BookOpen, CheckCircle, 
   BarChart3, Calendar, ChevronDown, ChevronUp, FileText,
-  Target, Award, Clock, AlertCircle
+  Target, Award, Clock, AlertCircle, Filter
 } from 'lucide-react';
 
 export default function ParentReport() {
@@ -24,9 +24,9 @@ export default function ParentReport() {
   const [homeworkData, setHomeworkData] = useState([]);
 
   // 기간 선택
-  const [periodMode, setPeriodMode] = useState('recent'); // 'recent' | 'custom'
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startMonth, setStartMonth] = useState(1);
+  const [endMonth, setEndMonth] = useState(12);
+  const currentYear = new Date().getFullYear();
 
   // 확장된 행
   const [expandedRows, setExpandedRows] = useState({});
@@ -63,6 +63,11 @@ export default function ParentReport() {
 
       setStudent(foundStudent);
       setIsLoggedIn(true);
+
+      // 현재 월 기준으로 기간 설정
+      const currentMonth = new Date().getMonth() + 1;
+      setStartMonth(Math.max(1, currentMonth - 2));
+      setEndMonth(currentMonth);
 
       // 관련 데이터 로드
       await loadStudentData(foundStudent.id);
@@ -111,24 +116,48 @@ export default function ParentReport() {
     }
   };
 
-  // 통계 계산
+  // 선택한 기간의 데이터 필터링
+  const getFilteredExams = () => {
+    if (!student?.exams) return [];
+    return student.exams.filter(e => 
+      e.month >= startMonth && e.month <= endMonth
+    );
+  };
+
+  const getFilteredAttendance = () => {
+    return attendanceData.filter(a => 
+      a.month >= startMonth && a.month <= endMonth
+    );
+  };
+
+  const getFilteredHomework = () => {
+    return homeworkData.filter(h => 
+      h.month >= startMonth && h.month <= endMonth
+    );
+  };
+
+  const getFilteredMemos = () => {
+    return memoData.filter(m => 
+      m.month >= startMonth && m.month <= endMonth
+    );
+  };
+
+  // 통계 계산 (기간 필터 적용)
   const calculateStats = () => {
     if (!student) return null;
 
-    const exams = student.exams || [];
+    const exams = getFilteredExams();
+    const attendance = getFilteredAttendance();
+    const homework = getFilteredHomework();
     
     // 출석률
-    const totalAttendance = attendanceData.length;
-    const presentCount = attendanceData.filter(a => a.status === '출석' || a.status === '지각').length;
+    const totalAttendance = attendance.length;
+    const presentCount = attendance.filter(a => a.status === '출석' || a.status === '지각').length;
     const attendanceRate = totalAttendance > 0 ? Math.round((presentCount / totalAttendance) * 100) : 0;
 
-    // 진도 진행률 (커리큘럼 기반)
-    const totalCurriculum = curriculumData.length;
-    const progressRate = totalCurriculum > 0 ? Math.min(100, Math.round((totalCurriculum / 20) * 100)) : 0;
-
     // 과제 완성도
-    const totalHomework = homeworkData.length;
-    const completedHomework = homeworkData.filter(h => 
+    const totalHomework = homework.length;
+    const completedHomework = homework.filter(h => 
       h.submitted || h.manualStatus === '개별확인완료'
     ).length;
     const homeworkRate = totalHomework > 0 ? Math.round((completedHomework / totalHomework) * 100) : 0;
@@ -139,37 +168,38 @@ export default function ParentReport() {
       ? Math.round(validExams.reduce((sum, e) => sum + (e.totalScore || 0), 0) / validExams.length * 10) / 10
       : 0;
 
+    // 수업 참여 횟수
+    const totalClasses = attendance.length;
+
     return {
       attendanceRate,
-      progressRate,
       homeworkRate,
       avgScore,
-      totalExams: validExams.length
+      totalExams: validExams.length,
+      totalClasses
     };
   };
 
-  // 점수 추이 데이터
+  // 점수 추이 데이터 (기간 필터 적용)
   const getScoreHistory = () => {
-    if (!student?.exams) return [];
-    
-    return student.exams
+    const exams = getFilteredExams();
+    return exams
       .filter(e => e.totalScore !== null && e.totalScore !== undefined)
-      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .sort((a, b) => {
+        // 월/주차 순으로 정렬
+        if (a.month !== b.month) return a.month - b.month;
+        if (a.week !== b.week) return (a.week || 0) - (b.week || 0);
+        return new Date(a.date) - new Date(b.date);
+      })
       .slice(-10); // 최근 10개
   };
 
-  // 학습 상세 기록
+  // 학습 상세 기록 (기간 필터 적용)
   const getLearningRecords = () => {
-    if (!student?.exams) return [];
-
-    // 시험 기록 + 수업 메모 결합
+    const exams = getFilteredExams();
     const records = [];
 
-    // 시험 기록
-    student.exams.forEach(exam => {
-      const curriculum = curriculumData.find(c => 
-        c.month === exam.month && c.weekNumber === exam.week
-      );
+    exams.forEach(exam => {
       const attendance = attendanceData.find(a => 
         a.month === exam.month && a.week === exam.week
       );
@@ -181,82 +211,28 @@ export default function ParentReport() {
         date: exam.date,
         month: exam.month,
         week: exam.week,
-        className: curriculum?.title || '-',
         attendance: attendance?.status || '-',
-        homeworkStatus: exam.note || '완료',
         score: exam.totalScore,
         examTitle: exam.examTitle,
-        curriculum: curriculum?.content || '',
-        nextTask: curriculum?.nextTask || '',
+        note: exam.note || '',
         memo: memo?.content || ''
       });
     });
 
     // 날짜순 정렬 (최신순)
-    return records.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return records.sort((a, b) => {
+      if (a.month !== b.month) return b.month - a.month;
+      return (b.week || 0) - (a.week || 0);
+    });
   };
 
-  // 종합 진단 생성
-  const getComprehensiveDiagnosis = () => {
-    if (!student) return '';
-    
-    const stats = calculateStats();
-    const exams = student.exams || [];
-    const recentMemos = memoData
-      .sort((a, b) => (b.month * 10 + b.week) - (a.month * 10 + a.week))
-      .slice(0, 5);
-
-    let diagnosis = `안녕하세요, ${student.name} 학생 학부모님.\n\n`;
-    
-    // 출석 현황
-    diagnosis += `📊 학습 현황 요약\n`;
-    diagnosis += `• 출석률: ${stats?.attendanceRate || 0}%\n`;
-    diagnosis += `• 과제 완성도: ${stats?.homeworkRate || 0}%\n`;
-    diagnosis += `• 테스트 평균: ${stats?.avgScore || 0}점 (총 ${stats?.totalExams || 0}회)\n\n`;
-
-    // 최근 수업 메모
-    if (recentMemos.length > 0) {
-      diagnosis += `📝 최근 수업 기록\n`;
-      recentMemos.forEach(memo => {
-        diagnosis += `• ${memo.month}월 ${memo.week}주차: ${memo.content}\n`;
+  // 수업 메모 모아보기
+  const getAllMemos = () => {
+    return getFilteredMemos()
+      .sort((a, b) => {
+        if (a.month !== b.month) return b.month - a.month;
+        return (b.week || 0) - (a.week || 0);
       });
-    }
-
-    return diagnosis;
-  };
-
-  // 게이지 차트 컴포넌트
-  const GaugeChart = ({ value, label, color, suffix = '%' }) => {
-    const rotation = (value / 100) * 180;
-    
-    return (
-      <div className="bg-white rounded-xl p-4 shadow-sm border">
-        <p className="text-sm font-medium text-gray-600 mb-3">{label}</p>
-        <div className="relative w-32 h-16 mx-auto overflow-hidden">
-          {/* 배경 아크 */}
-          <div 
-            className="absolute w-32 h-32 rounded-full border-8 border-gray-200"
-            style={{ 
-              clipPath: 'polygon(0 0, 100% 0, 100% 50%, 0 50%)',
-              top: 0
-            }}
-          />
-          {/* 값 아크 */}
-          <div 
-            className={`absolute w-32 h-32 rounded-full border-8 ${color}`}
-            style={{ 
-              clipPath: 'polygon(0 0, 100% 0, 100% 50%, 0 50%)',
-              top: 0,
-              transform: `rotate(${rotation - 180}deg)`,
-              transformOrigin: 'center center'
-            }}
-          />
-        </div>
-        <p className={`text-2xl font-bold text-center mt-2 ${color.replace('border-', 'text-')}`}>
-          {value}{suffix}
-        </p>
-      </div>
-    );
   };
 
   // 로그인 화면
@@ -338,7 +314,13 @@ export default function ParentReport() {
   const stats = calculateStats();
   const scoreHistory = getScoreHistory();
   const learningRecords = getLearningRecords();
-  const diagnosis = getComprehensiveDiagnosis();
+  const allMemos = getAllMemos();
+
+  // 점수 범위 계산 (그래프용)
+  const scores = scoreHistory.map(e => e.totalScore || 0);
+  const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+  const maxScore = scores.length > 0 ? Math.max(...scores) : 100;
+  const scoreRange = maxScore - minScore || 1;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
@@ -362,117 +344,67 @@ export default function ParentReport() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        {/* 보고서 요약 */}
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">보고서 요약</h2>
-              <p className="text-sm text-gray-500">
-                기간: 전체 학습 기록
-              </p>
+        {/* 기간 선택 */}
+        <div className="bg-white rounded-2xl shadow-lg p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter size={18} className="text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">조회 기간:</span>
             </div>
-            <div className="text-right">
+            <div className="flex items-center gap-2">
+              <select
+                value={startMonth}
+                onChange={(e) => setStartMonth(Number(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+              <span className="text-gray-500">~</span>
+              <select
+                value={endMonth}
+                onChange={(e) => setEndMonth(Number(e.target.value))}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+              >
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                  <option key={m} value={m}>{m}월</option>
+                ))}
+              </select>
+            </div>
+            <div className="text-right flex-1">
               <p className="font-medium text-gray-800">{student?.name} 학생</p>
               <p className="text-sm text-gray-500">{student?.grade} · {student?.school || '-'}</p>
             </div>
           </div>
+        </div>
 
-          {/* 게이지 차트 4개 */}
+        {/* 보고서 요약 */}
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">📊 학습 현황 요약</h2>
+
+          {/* 통계 카드 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
-              <p className="text-sm font-medium text-blue-600 mb-2">진도 진행률</p>
-              <div className="relative w-24 h-12 mx-auto mb-2">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(stats?.attendanceRate || 0) * 1.26} 126`}
-                  />
-                </svg>
-              </div>
-              <p className="text-2xl font-bold text-blue-600">{stats?.attendanceRate || 0}%</p>
+              <p className="text-sm font-medium text-blue-600 mb-2">출석률</p>
+              <p className="text-3xl font-bold text-blue-600">{stats?.attendanceRate || 0}%</p>
+              <p className="text-xs text-blue-500 mt-1">{stats?.totalClasses || 0}회 수업</p>
             </div>
 
             <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
-              <p className="text-sm font-medium text-green-600 mb-2">진도 완성률</p>
-              <div className="relative w-24 h-12 mx-auto mb-2">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#22c55e"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(stats?.progressRate || 0) * 1.26} 126`}
-                  />
-                </svg>
-              </div>
-              <p className="text-2xl font-bold text-green-600">{stats?.progressRate || 0}%</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl p-4 text-center">
-              <p className="text-sm font-medium text-rose-600 mb-2">과제 완성도</p>
-              <div className="relative w-24 h-12 mx-auto mb-2">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#f43f5e"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(stats?.homeworkRate || 0) * 1.26} 126`}
-                  />
-                </svg>
-              </div>
-              <p className="text-2xl font-bold text-rose-600">{stats?.homeworkRate || 0}%</p>
+              <p className="text-sm font-medium text-green-600 mb-2">과제 완성도</p>
+              <p className="text-3xl font-bold text-green-600">{stats?.homeworkRate || 0}%</p>
             </div>
 
             <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center">
               <p className="text-sm font-medium text-purple-600 mb-2">테스트 평균</p>
-              <div className="relative w-24 h-12 mx-auto mb-2">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#e5e7eb"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M 10 45 A 40 40 0 0 1 90 45"
-                    fill="none"
-                    stroke="#a855f7"
-                    strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${(stats?.avgScore || 0) * 1.26} 126`}
-                  />
-                </svg>
-              </div>
-              <p className="text-2xl font-bold text-purple-600">{stats?.avgScore || 0}점</p>
+              <p className="text-3xl font-bold text-purple-600">{stats?.avgScore || 0}점</p>
+              <p className="text-xs text-purple-500 mt-1">{stats?.totalExams || 0}회 응시</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-4 text-center">
+              <p className="text-sm font-medium text-orange-600 mb-2">조회 기간</p>
+              <p className="text-2xl font-bold text-orange-600">{startMonth}~{endMonth}월</p>
             </div>
           </div>
         </div>
@@ -485,22 +417,35 @@ export default function ParentReport() {
               점수 추이
             </h2>
             
-            <div className="relative h-48">
-              {/* 간단한 라인 차트 */}
-              <div className="absolute inset-0 flex items-end justify-between gap-2 pb-6">
+            <div className="relative h-64 pt-6">
+              {/* Y축 라벨 */}
+              <div className="absolute left-0 top-6 bottom-8 w-10 flex flex-col justify-between text-xs text-gray-400">
+                <span>{maxScore}</span>
+                <span>{Math.round((maxScore + minScore) / 2)}</span>
+                <span>{minScore}</span>
+              </div>
+              
+              {/* 그래프 영역 */}
+              <div className="ml-12 h-full flex items-end gap-2 pb-8">
                 {scoreHistory.map((exam, idx) => {
-                  const height = `${(exam.totalScore / 100) * 100}%`;
+                  // 점수를 0~100% 범위로 변환 (최소~최대 범위 기준)
+                  const heightPercent = scoreRange > 0 
+                    ? ((exam.totalScore - minScore) / scoreRange) * 80 + 10  // 10~90% 범위
+                    : 50;
+                  
                   return (
                     <div key={idx} className="flex-1 flex flex-col items-center">
-                      <div 
-                        className="w-full bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg transition-all hover:from-green-600 hover:to-emerald-500"
-                        style={{ height }}
-                      />
-                      <p className="text-xs text-gray-500 mt-2 truncate w-full text-center">
-                        {exam.date?.slice(5) || '-'}
-                      </p>
-                      <p className="text-xs font-medium text-green-600">
-                        {exam.totalScore}점
+                      <div className="w-full flex flex-col items-center" style={{ height: '180px' }}>
+                        <span className="text-xs font-semibold text-green-600 mb-1">
+                          {exam.totalScore}
+                        </span>
+                        <div 
+                          className="w-full max-w-12 bg-gradient-to-t from-green-500 to-emerald-400 rounded-t-lg transition-all hover:from-green-600 hover:to-emerald-500"
+                          style={{ height: `${heightPercent}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        {exam.month}/{exam.week || 1}주
                       </p>
                     </div>
                   );
@@ -508,14 +453,18 @@ export default function ParentReport() {
               </div>
               
               {/* 평균선 */}
-              <div 
-                className="absolute w-full border-t-2 border-dashed border-green-300"
-                style={{ bottom: `${(stats?.avgScore || 0) + 24}%` }}
-              >
-                <span className="absolute right-0 -top-5 text-xs text-green-600 bg-white px-1">
-                  평균 {stats?.avgScore}점
-                </span>
-              </div>
+              {stats?.avgScore > 0 && (
+                <div 
+                  className="absolute left-12 right-0 border-t-2 border-dashed border-orange-400"
+                  style={{ 
+                    bottom: `${((stats.avgScore - minScore) / scoreRange) * 80 + 10 + 32}px`
+                  }}
+                >
+                  <span className="absolute right-0 -top-5 text-xs text-orange-500 bg-white px-1">
+                    평균 {stats.avgScore}점
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -525,12 +474,11 @@ export default function ParentReport() {
           <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <FileText className="text-indigo-500" size={20} />
             학습 상세 기록
-            <span className="text-sm font-normal text-gray-500">(항목 클릭 시 상세보기)</span>
           </h2>
 
           {learningRecords.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              아직 학습 기록이 없습니다.
+              선택한 기간에 학습 기록이 없습니다.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -538,14 +486,13 @@ export default function ParentReport() {
                 <thead>
                   <tr className="border-b-2 border-gray-200">
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">날짜</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">반</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">출석</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">과제 완성도</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">테스트</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">시험</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">점수</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {learningRecords.slice(0, 10).map((record, idx) => {
+                  {learningRecords.map((record, idx) => {
                     const isExpanded = expandedRows[idx];
                     
                     return (
@@ -557,10 +504,9 @@ export default function ParentReport() {
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-2">
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                              {record.date}
+                              {record.month}월 {record.week}주
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-center text-sm">{record.className}</td>
                           <td className="px-4 py-3 text-center">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               record.attendance === '출석' ? 'bg-green-100 text-green-700' :
@@ -571,35 +517,25 @@ export default function ParentReport() {
                               {record.attendance}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-center text-sm">{record.homeworkStatus}</td>
+                          <td className="px-4 py-3 text-sm">{record.examTitle || '-'}</td>
                           <td className="px-4 py-3 text-center">
                             {record.score !== null && record.score !== undefined ? (
-                              <span className="font-semibold text-indigo-600">{record.score}</span>
-                            ) : '-'}
+                              <span className="font-semibold text-indigo-600">{record.score}점</span>
+                            ) : (
+                              <span className="text-gray-400">{record.note || '-'}</span>
+                            )}
                           </td>
                         </tr>
                         
                         {/* 확장 행 */}
-                        {isExpanded && (
+                        {isExpanded && record.memo && (
                           <tr className="bg-indigo-50/50">
-                            <td colSpan={5} className="px-6 py-4">
-                              <div className="space-y-3">
-                                {record.examTitle && (
-                                  <div className="bg-white rounded-lg p-3">
-                                    <p className="text-sm font-medium text-gray-700">📝 수업 내용:</p>
-                                    <p className="text-sm text-gray-600 mt-1">
-                                      {record.examTitle}
-                                    </p>
-                                  </div>
-                                )}
-                                {record.memo && (
-                                  <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
-                                    <p className="text-sm font-medium text-yellow-800">💡 특이사항:</p>
-                                    <p className="text-sm text-yellow-700 mt-1 whitespace-pre-wrap">
-                                      {record.memo}
-                                    </p>
-                                  </div>
-                                )}
+                            <td colSpan={4} className="px-6 py-4">
+                              <div className="bg-yellow-50 rounded-lg p-3 border border-yellow-200">
+                                <p className="text-sm font-medium text-yellow-800">💡 수업 메모:</p>
+                                <p className="text-sm text-yellow-700 mt-1 whitespace-pre-wrap">
+                                  {record.memo}
+                                </p>
                               </div>
                             </td>
                           </tr>
@@ -613,42 +549,52 @@ export default function ParentReport() {
           )}
         </div>
 
-        {/* 종합 진단 */}
+        {/* 수업 메모 모아보기 */}
+        {allMemos.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <h2 className="text-lg font-bold text-cyan-600 mb-4">
+              📝 선생님 메모
+            </h2>
+            <div className="space-y-3">
+              {allMemos.map((memo, idx) => (
+                <div key={idx} className="bg-cyan-50 rounded-xl p-4 border border-cyan-100">
+                  <p className="text-xs text-cyan-600 font-medium mb-1">
+                    {memo.month}월 {memo.week}주차
+                  </p>
+                  <p className="text-gray-700 whitespace-pre-wrap">
+                    {memo.content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 종합 평가 */}
         <div className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-lg font-bold text-cyan-600 mb-4 flex items-center gap-2">
-            1. 학습 과정 요약
-          </h2>
-          <div className="bg-cyan-50 rounded-xl p-4 mb-6">
-            <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-              {diagnosis}
-            </p>
-          </div>
-
-          <h2 className="text-lg font-bold text-green-600 mb-4 flex items-center gap-2">
-            2. 학습 방향 제안
-          </h2>
-          <div className="bg-green-50 rounded-xl p-4 mb-6">
-            <p className="text-gray-700 leading-relaxed">
-              {stats?.avgScore >= 80 
-                ? `${student?.name} 학생은 전반적으로 학습 태도가 긍정적이며, 꾸준히 노력하는 모습을 보여주고 있습니다. 현재 수준을 유지하면서 심화 학습을 병행하면 더욱 좋은 결과를 얻을 수 있을 것입니다.`
-                : stats?.avgScore >= 60
-                ? `${student?.name} 학생은 기본기가 잘 갖추어져 있으나, 일부 취약한 부분이 있습니다. 해당 부분을 집중적으로 보완하면 성적 향상을 기대할 수 있습니다.`
-                : `${student?.name} 학생은 기초부터 차근차근 다지는 것이 중요합니다. 매일 꾸준한 학습 습관을 기르고, 모르는 부분은 바로바로 질문하는 것이 좋습니다.`
-              }
-            </p>
-          </div>
-
-          <h2 className="text-lg font-bold text-purple-600 mb-4 flex items-center gap-2">
-            3. 종합 평가
+          <h2 className="text-lg font-bold text-purple-600 mb-4">
+            📋 종합 평가
           </h2>
           <div className="bg-purple-50 rounded-xl p-4">
             <p className="text-gray-700 leading-relaxed">
-              {student?.name} 학생의 학습 현황을 종합적으로 평가했을 때, 
-              출석률 {stats?.attendanceRate}%, 과제 완성도 {stats?.homeworkRate}%, 
-              테스트 평균 {stats?.avgScore}점으로 
-              {stats?.avgScore >= 80 ? '우수한' : stats?.avgScore >= 60 ? '양호한' : '노력이 필요한'} 
-              학습 수준을 보이고 있습니다.
-              가정에서도 꾸준한 관심과 격려를 부탁드립니다.
+              <strong>{student?.name}</strong> 학생의 {startMonth}월~{endMonth}월 학습 현황입니다.
+              <br /><br />
+              • 출석률 <strong>{stats?.attendanceRate}%</strong> ({stats?.totalClasses}회 수업)
+              <br />
+              • 과제 완성도 <strong>{stats?.homeworkRate}%</strong>
+              <br />
+              • 테스트 평균 <strong>{stats?.avgScore}점</strong> ({stats?.totalExams}회 응시)
+              <br /><br />
+              {stats?.avgScore >= 80 
+                ? '전반적으로 우수한 학습 태도를 보이고 있습니다. 현재 수준을 유지하면서 심화 학습을 병행하면 더욱 좋은 결과를 얻을 수 있을 것입니다.'
+                : stats?.avgScore >= 60
+                ? '기본기가 잘 갖추어져 있으나, 일부 취약한 부분이 있습니다. 해당 부분을 집중적으로 보완하면 성적 향상을 기대할 수 있습니다.'
+                : stats?.totalExams > 0
+                ? '기초부터 차근차근 다지는 것이 중요합니다. 매일 꾸준한 학습 습관을 기르고, 모르는 부분은 바로바로 질문하는 것이 좋습니다.'
+                : '아직 테스트 기록이 없습니다. 앞으로의 학습 과정을 기대합니다.'
+              }
+              <br /><br />
+              가정에서도 꾸준한 관심과 격려를 부탁드립니다. 🙏
             </p>
           </div>
         </div>
