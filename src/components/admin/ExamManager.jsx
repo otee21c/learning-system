@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { FileText, Plus, Trash2, Edit2, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { getMonthWeek } from '../../utils/dateUtils';
@@ -12,11 +12,11 @@ export default function ExamManager({ exams, students, branch }) {
     totalQuestions: 45,
     answers: Array(45).fill(''),
     scores: Array(45).fill(2),
-    types: Array(45).fill('독서_정보 독해'),
-    gradeTable: [] // 등급 기준표 (선택)
+    types: Array(45).fill('독서_정보 독해')
   });
 
   const [editingExam, setEditingExam] = useState(null);
+  const [expandedExamId, setExpandedExamId] = useState(null);
 
   const questionTypes = [
     '독서_정보 독해', '독서_의미 독해', '독서_보기 독해', 
@@ -71,8 +71,7 @@ export default function ExamManager({ exams, students, branch }) {
         totalQuestions: 45,
         answers: Array(45).fill(''),
         scores: Array(45).fill(2),
-        types: Array(45).fill('독서_정보 독해'),
-        gradeTable: []
+        types: Array(45).fill('독서_정보 독해')
       });
       
       alert('시험이 추가되었습니다.');
@@ -95,7 +94,18 @@ export default function ExamManager({ exams, students, branch }) {
     }
   };
 
-  // 시험 수정
+  // 시험 수정 시작
+  const startEdit = (exam) => {
+    setEditingExam({
+      ...exam,
+      answers: exam.answers || Array(exam.totalQuestions).fill(''),
+      scores: exam.scores || Array(exam.totalQuestions).fill(2),
+      types: exam.types || Array(exam.totalQuestions).fill('독서_정보 독해')
+    });
+    setExpandedExamId(exam.id);
+  };
+
+  // 시험 수정 저장
   const handleUpdateExam = async () => {
     if (!editingExam) return;
 
@@ -121,6 +131,117 @@ export default function ExamManager({ exams, students, branch }) {
     }
   };
 
+  // 수정 모드에서 값 변경
+  const updateEditingAnswer = (index, value) => {
+    const newAnswers = [...editingExam.answers];
+    newAnswers[index] = value;
+    setEditingExam({ ...editingExam, answers: newAnswers });
+  };
+
+  const updateEditingScore = (index, value) => {
+    const newScores = [...editingExam.scores];
+    newScores[index] = parseInt(value) || 0;
+    setEditingExam({ ...editingExam, scores: newScores });
+  };
+
+  const updateEditingType = (index, value) => {
+    const newTypes = [...editingExam.types];
+    newTypes[index] = value;
+    setEditingExam({ ...editingExam, types: newTypes });
+  };
+
+  // 정답지 테이블 렌더링 (신규 등록용)
+  const renderAnswerTable = (examData, isEditing = false) => {
+    const answers = examData.answers;
+    const scores = examData.scores;
+    const types = examData.types;
+    const totalQuestions = examData.totalQuestions;
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="bg-green-500 text-white">
+              <th className="border border-green-600 px-2 py-1 w-12">#</th>
+              <th className="border border-green-600 px-2 py-1 w-16">문번</th>
+              <th className="border border-green-600 px-2 py-1 w-16">구분</th>
+              <th className="border border-green-600 px-2 py-1 w-20">정답</th>
+              <th className="border border-green-600 px-2 py-1 w-16">배점</th>
+              <th className="border border-green-600 px-2 py-1">영역</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...Array(totalQuestions)].map((_, i) => (
+              <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                <td className="border border-gray-300 px-2 py-1 text-center text-gray-500">{i + 1}</td>
+                <td className="border border-gray-300 px-2 py-1 text-center font-medium">{i + 1}</td>
+                <td className="border border-gray-300 px-2 py-1 text-center text-gray-600">객관식</td>
+                <td className="border border-gray-300 px-1 py-1">
+                  <select
+                    value={isEditing ? answers[i] : newExam.answers[i]}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        updateEditingAnswer(i, e.target.value);
+                      } else {
+                        const newAnswers = [...newExam.answers];
+                        newAnswers[i] = e.target.value;
+                        setNewExam({ ...newExam, answers: newAnswers });
+                      }
+                    }}
+                    className="w-full px-1 py-1 border-0 bg-transparent focus:ring-1 focus:ring-green-500 rounded"
+                  >
+                    <option value="">-</option>
+                    <option value="1">①</option>
+                    <option value="2">②</option>
+                    <option value="3">③</option>
+                    <option value="4">④</option>
+                    <option value="5">⑤</option>
+                  </select>
+                </td>
+                <td className="border border-gray-300 px-1 py-1">
+                  <input
+                    type="number"
+                    value={isEditing ? scores[i] : newExam.scores[i]}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        updateEditingScore(i, e.target.value);
+                      } else {
+                        const newScores = [...newExam.scores];
+                        newScores[i] = parseInt(e.target.value) || 0;
+                        setNewExam({ ...newExam, scores: newScores });
+                      }
+                    }}
+                    className="w-full px-1 py-1 border-0 bg-transparent text-center focus:ring-1 focus:ring-green-500 rounded"
+                    min="0"
+                  />
+                </td>
+                <td className="border border-gray-300 px-1 py-1">
+                  <select
+                    value={isEditing ? types[i] : newExam.types[i]}
+                    onChange={(e) => {
+                      if (isEditing) {
+                        updateEditingType(i, e.target.value);
+                      } else {
+                        const newTypes = [...newExam.types];
+                        newTypes[i] = e.target.value;
+                        setNewExam({ ...newExam, types: newTypes });
+                      }
+                    }}
+                    className="w-full px-1 py-1 border-0 bg-transparent focus:ring-1 focus:ring-green-500 rounded text-sm"
+                  >
+                    {questionTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* 새 시험 등록 */}
@@ -137,7 +258,7 @@ export default function ExamManager({ exams, students, branch }) {
             onChange={(e) => setNewExam({ ...newExam, title: e.target.value })}
             className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
           />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <input
               type="date"
               value={newExam.date}
@@ -153,68 +274,26 @@ export default function ExamManager({ exams, students, branch }) {
               <option value="수학">수학</option>
               <option value="영어">영어</option>
             </select>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium whitespace-nowrap">문제 수:</label>
+              <input
+                type="number"
+                value={newExam.totalQuestions}
+                onChange={(e) => updateExamQuestions(e.target.value)}
+                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                min="1"
+                max="100"
+              />
+            </div>
           </div>
           
-          <div>
-            <label className="block text-sm font-medium mb-2">문제 수 (1-100)</label>
-            <input
-              type="number"
-              value={newExam.totalQuestions}
-              onChange={(e) => updateExamQuestions(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              min="1"
-              max="100"
-            />
-          </div>
-          
-          <div className="border-2 border-gray-200 rounded-xl p-6 bg-gray-50">
-            <h3 className="font-semibold text-lg mb-4">정답, 배점 및 유형 입력</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
-              {[...Array(newExam.totalQuestions)].map((_, i) => (
-                <div key={i} className="border-2 border-gray-300 rounded-lg p-3 bg-white">
-                  <label className="text-xs font-semibold text-gray-700 block mb-2">{i + 1}번</label>
-                  <select
-                    value={newExam.answers[i]}
-                    onChange={(e) => {
-                      const newAnswers = [...newExam.answers];
-                      newAnswers[i] = e.target.value;
-                      setNewExam({ ...newExam, answers: newAnswers });
-                    }}
-                    className="w-full px-2 py-2 border rounded-lg text-sm mb-2 focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="">정답</option>
-                    <option value="1">①</option>
-                    <option value="2">②</option>
-                    <option value="3">③</option>
-                    <option value="4">④</option>
-                    <option value="5">⑤</option>
-                  </select>
-                  <input
-                    type="number"
-                    value={newExam.scores[i]}
-                    onChange={(e) => {
-                      const newScores = [...newExam.scores];
-                      newScores[i] = parseInt(e.target.value) || 0;
-                      setNewExam({ ...newExam, scores: newScores });
-                    }}
-                    className="w-full px-2 py-2 border rounded-lg text-sm mb-2 focus:ring-2 focus:ring-indigo-500"
-                    placeholder="배점"
-                  />
-                  <select
-                    value={newExam.types[i]}
-                    onChange={(e) => {
-                      const newTypes = [...newExam.types];
-                      newTypes[i] = e.target.value;
-                      setNewExam({ ...newExam, types: newTypes });
-                    }}
-                    className="w-full px-2 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  >
-                    {questionTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+          {/* 정답지 테이블 */}
+          <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-100 px-4 py-2 font-semibold text-gray-700">
+              정답지 입력 (총 {newExam.totalQuestions}문항 / 총점: {newExam.scores.reduce((a, b) => a + b, 0)}점)
+            </div>
+            <div className="max-h-[500px] overflow-y-auto">
+              {renderAnswerTable(newExam, false)}
             </div>
           </div>
           
@@ -236,109 +315,130 @@ export default function ExamManager({ exams, students, branch }) {
           {exams.map((exam) => (
             <div
               key={exam.id}
-              className="border-2 border-gray-200 rounded-xl p-6 hover:shadow-md transition"
+              className="border-2 border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition"
             >
-              {editingExam && editingExam.id === exam.id ? (
-                // 수정 모드
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    value={editingExam.title}
-                    onChange={(e) => setEditingExam({ ...editingExam, title: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg"
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="date"
-                      value={editingExam.date}
-                      onChange={(e) => setEditingExam({ ...editingExam, date: e.target.value })}
-                      className="px-4 py-2 border rounded-lg"
-                    />
-                    <select
-                      value={editingExam.subject}
-                      onChange={(e) => setEditingExam({ ...editingExam, subject: e.target.value })}
-                      className="px-4 py-2 border rounded-lg"
-                    >
-                      <option value="국어">국어</option>
-                      <option value="수학">수학</option>
-                      <option value="영어">영어</option>
-                    </select>
+              {/* 시험 헤더 */}
+              <div className="p-4 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg">
+                      <FileText className="text-white" size={20} />
+                    </div>
+                    <div>
+                      {editingExam?.id === exam.id ? (
+                        <input
+                          type="text"
+                          value={editingExam.title}
+                          onChange={(e) => setEditingExam({ ...editingExam, title: e.target.value })}
+                          className="px-2 py-1 border rounded font-bold text-lg"
+                        />
+                      ) : (
+                        <p className="font-bold text-lg">{exam.title}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        {editingExam?.id === exam.id ? (
+                          <input
+                            type="date"
+                            value={editingExam.date}
+                            onChange={(e) => setEditingExam({ ...editingExam, date: e.target.value })}
+                            className="px-2 py-1 border rounded text-sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-gray-600">
+                            {exam.date} | {exam.subject} | {exam.totalQuestions}문항 | {exam.scores?.reduce((a, b) => a + b, 0) || 0}점
+                          </span>
+                        )}
+                        {exam.month && exam.week && (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+                            {exam.month}월 {exam.week}주차
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleUpdateExam}
-                      className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2"
-                    >
-                      <Save size={16} />
-                      저장
-                    </button>
-                    <button
-                      onClick={() => setEditingExam(null)}
-                      className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition flex items-center justify-center gap-2"
-                    >
-                      <X size={16} />
-                      취소
-                    </button>
+                  <div className="flex items-center gap-2">
+                    {editingExam?.id === exam.id ? (
+                      <>
+                        <button
+                          onClick={handleUpdateExam}
+                          className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition flex items-center gap-1"
+                        >
+                          <Save size={16} />
+                          저장
+                        </button>
+                        <button
+                          onClick={() => setEditingExam(null)}
+                          className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition flex items-center gap-1"
+                        >
+                          <X size={16} />
+                          취소
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => startEdit(exam)}
+                          className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
+                          title="수정"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExam(exam.id)}
+                          className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
+                          title="삭제"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => setExpandedExamId(expandedExamId === exam.id ? null : exam.id)}
+                          className="p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition"
+                          title="정답지 보기"
+                        >
+                          {expandedExamId === exam.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
-              ) : (
-                // 일반 모드
-                <>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl">
-                        <FileText className="text-white" size={24} />
-                      </div>
-                      <div>
-                        <p className="font-bold text-xl">{exam.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <p className="text-sm text-gray-600">
-                            {exam.date} | {exam.subject} | {exam.totalQuestions}문항
-                          </p>
-                          {exam.month && exam.week && (
-                            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
-                              {exam.month}월 {exam.week}주차
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setEditingExam(exam)}
-                        className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteExam(exam.id)}
-                        className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+              </div>
+
+              {/* 정답지 상세 (펼치기) */}
+              {(expandedExamId === exam.id || editingExam?.id === exam.id) && (
+                <div className="border-t border-gray-200">
+                  <div className="max-h-[400px] overflow-y-auto">
+                    {editingExam?.id === exam.id ? (
+                      renderAnswerTable(editingExam, true)
+                    ) : (
+                      <table className="w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-green-500 text-white sticky top-0">
+                            <th className="border border-green-600 px-2 py-1 w-12">#</th>
+                            <th className="border border-green-600 px-2 py-1 w-16">문번</th>
+                            <th className="border border-green-600 px-2 py-1 w-16">구분</th>
+                            <th className="border border-green-600 px-2 py-1 w-20">정답</th>
+                            <th className="border border-green-600 px-2 py-1 w-16">배점</th>
+                            <th className="border border-green-600 px-2 py-1">영역</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {exam.answers?.map((answer, i) => (
+                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                              <td className="border border-gray-300 px-2 py-1 text-center text-gray-500">{i + 1}</td>
+                              <td className="border border-gray-300 px-2 py-1 text-center font-medium">{i + 1}</td>
+                              <td className="border border-gray-300 px-2 py-1 text-center text-gray-600">객관식</td>
+                              <td className="border border-gray-300 px-2 py-1 text-center font-bold text-green-600">
+                                {answer ? `${['①','②','③','④','⑤'][parseInt(answer)-1] || answer}` : '-'}
+                              </td>
+                              <td className="border border-gray-300 px-2 py-1 text-center">{exam.scores?.[i] || 2}</td>
+                              <td className="border border-gray-300 px-2 py-1 text-sm">{exam.types?.[i] || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600">총 배점</p>
-                      <p className="font-bold text-lg text-indigo-600">
-                        {exam.scores.reduce((a, b) => a + b, 0)}점
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600">문항 수</p>
-                      <p className="font-bold text-lg text-purple-600">
-                        {exam.totalQuestions}개
-                      </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <p className="text-xs text-gray-600">응시 학생</p>
-                      <p className="font-bold text-lg text-green-600">
-                        {students.filter(s => s.exams?.some(e => e.examId === exam.id)).length}명
-                      </p>
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
             </div>
           ))}

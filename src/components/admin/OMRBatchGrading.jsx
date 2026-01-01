@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Upload, FileText, Trash2, Edit3, Save, X, Check, 
   ChevronDown, ChevronUp, Camera, AlertCircle, Loader2,
-  Download, RefreshCw, Users, CheckCircle
+  Download, RefreshCw, Users, CheckCircle, File
 } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -10,17 +10,18 @@ import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
 export default function OMRBatchGrading({ exams, students, branch }) {
   // 탭 상태
-  const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'manual' | 'report'
+  const [activeTab, setActiveTab] = useState('scan'); // 'scan' | 'manual'
   
   // 시험 선택
   const [selectedExamId, setSelectedExamId] = useState('');
   const selectedExam = exams.find(e => e.id === selectedExamId);
   
-  // OMR 이미지 및 인식 결과
-  const [omrImages, setOmrImages] = useState([]);
+  // PDF 및 인식 결과
+  const [pdfPages, setPdfPages] = useState([]); // {pageNum, imageData, preview}
   const [scanResults, setScanResults] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   
   // 수정 모드
   const [editingIndex, setEditingIndex] = useState(null);
@@ -30,7 +31,6 @@ export default function OMRBatchGrading({ exams, students, branch }) {
   const [savedResults, setSavedResults] = useState([]);
 
   // 수동 성적 입력용
-  const todayMonthWeek = getTodayMonthWeek();
   const [manualScore, setManualScore] = useState({
     studentId: '',
     score: '',
@@ -38,45 +38,81 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     note: ''
   });
 
-  // 영역별 색상
-  const typeColors = {
-    '독서_정보 독해': 'bg-blue-100 text-blue-700',
-    '독서_의미 독해': 'bg-blue-200 text-blue-800',
-    '독서_보기 독해': 'bg-blue-300 text-blue-900',
-    '문학_정보 독해': 'bg-purple-100 text-purple-700',
-    '문학_의미 독해': 'bg-purple-200 text-purple-800',
-    '문학_보기 독해': 'bg-purple-300 text-purple-900',
-    '화작 영역': 'bg-green-100 text-green-700',
-    '언매 영역': 'bg-yellow-100 text-yellow-700'
-  };
+  // PDF.js 로드
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+    
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
-  // OMR 이미지 업로드
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
+  // PDF 파일 업로드 및 이미지 변환
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || file.type !== 'application/pdf') {
+      alert('PDF 파일만 업로드 가능합니다.');
+      return;
+    }
 
-    const newImages = [];
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        newImages.push({
-          file: file,
-          name: file.name,
-          preview: reader.result,
-          base64: reader.result.split(',')[1]
-        });
+    setIsLoadingPdf(true);
+    setPdfPages([]);
+    setScanResults([]);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // PDF.js 로드 대기
+      if (!window.pdfjsLib) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pages = [];
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const scale = 2; // 고해상도
+        const viewport = page.getViewport({ scale });
         
-        if (newImages.length === files.length) {
-          setOmrImages(prev => [...prev, ...newImages]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.95);
+        
+        pages.push({
+          pageNum: i,
+          preview: imageData,
+          base64: imageData.split(',')[1]
+        });
+      }
+
+      setPdfPages(pages);
+      alert(`PDF에서 ${pages.length}장의 OMR을 추출했습니다.`);
+    } catch (error) {
+      console.error('PDF 처리 오류:', error);
+      alert('PDF 처리 중 오류가 발생했습니다: ' + error.message);
+    } finally {
+      setIsLoadingPdf(false);
+    }
   };
 
-  // 이미지 제거
-  const removeImage = (index) => {
-    setOmrImages(prev => prev.filter((_, i) => i !== index));
+  // 페이지 제거
+  const removePage = (index) => {
+    setPdfPages(prev => prev.filter((_, i) => i !== index));
     setScanResults(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -87,36 +123,38 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       return;
     }
     
-    if (omrImages.length === 0) {
-      alert('OMR 이미지를 업로드해주세요.');
+    if (pdfPages.length === 0) {
+      alert('PDF를 업로드해주세요.');
       return;
     }
 
     setIsScanning(true);
-    setScanProgress({ current: 0, total: omrImages.length });
+    setScanProgress({ current: 0, total: pdfPages.length });
     
     const results = [];
     
-    for (let i = 0; i < omrImages.length; i++) {
-      setScanProgress({ current: i + 1, total: omrImages.length });
+    for (let i = 0; i < pdfPages.length; i++) {
+      setScanProgress({ current: i + 1, total: pdfPages.length });
       
       try {
-        const result = await analyzeOMRImage(omrImages[i].base64, selectedExam);
+        const result = await analyzeOMRImage(pdfPages[i].base64, selectedExam);
         results.push({
           ...result,
-          imageIndex: i,
-          imageName: omrImages[i].name
+          pageIndex: i,
+          pageNum: pdfPages[i].pageNum,
+          matchedStudentId: findMatchingStudent(result.studentName, result.birthDate)
         });
       } catch (error) {
-        console.error(`이미지 ${i + 1} 분석 실패:`, error);
+        console.error(`페이지 ${i + 1} 분석 실패:`, error);
         results.push({
           error: true,
           errorMessage: error.message,
-          imageIndex: i,
-          imageName: omrImages[i].name,
+          pageIndex: i,
+          pageNum: pdfPages[i].pageNum,
           studentName: '',
           birthDate: '',
-          answers: Array(selectedExam.totalQuestions).fill('')
+          matchedStudentId: '',
+          answers: Array(selectedExam.totalQuestions).fill(0)
         });
       }
     }
@@ -125,29 +163,58 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     setIsScanning(false);
   };
 
+  // 학생 매칭 함수 (이름으로 우선 매칭, 생일로 보조)
+  const findMatchingStudent = (name, birthDate) => {
+    if (!name) return '';
+    
+    // 이름 완전 일치
+    let match = students.find(s => s.name === name);
+    if (match) return match.id;
+    
+    // 이름 부분 일치
+    match = students.find(s => s.name.includes(name) || name.includes(s.name));
+    if (match) return match.id;
+    
+    // 이름 + 생일로 매칭
+    if (birthDate) {
+      match = students.find(s => {
+        const studentBirth = s.birthDate?.replace(/-/g, '').slice(-4) || '';
+        return s.name.includes(name) && studentBirth.includes(birthDate);
+      });
+      if (match) return match.id;
+    }
+    
+    return '';
+  };
+
   // Claude Vision API 호출
   const analyzeOMRImage = async (base64Image, exam) => {
-    const prompt = `이 OMR 카드 이미지를 분석해주세요.
+    const prompt = `이 OMR 답안지 이미지를 분석해주세요.
 
-분석할 내용:
-1. 학생 이름 (왼쪽 상단 "성 명" 란의 한글 마킹)
-2. 생년월일 (오른쪽 "생 일" 란의 숫자 마킹, 4자리 MMDD 형식)
-3. 선택과목 표시 (오른쪽 상단 - 화법과 작문 또는 언어와 매체)
-4. 1번부터 ${exam.totalQuestions}번까지의 답안 (각 문항당 1~5 중 마킹된 번호)
+## 분석 대상
+1. 학생 이름: 왼쪽 상단 "성 명" 영역의 한글 마킹 (초성+중성+종성 조합)
+2. 생년월일: "생 일" 영역의 숫자 마킹 (4자리, MMDD 형식)
+3. 선택과목: 오른쪽 상단 체크 표시 (화법과 작문 / 언어와 매체)
+4. 답안: 1번부터 ${exam.totalQuestions}번까지 마킹된 번호 (1~5)
 
-응답 형식 (JSON만 출력):
+## OMR 카드 구조
+- 공통과목 답란: 1~34번 (가운데 영역)
+- 선택과목 답란: 35~45번 (오른쪽 영역)
+- 각 문항은 ①②③④⑤ 중 하나가 검게 칠해져 있음
+
+## 응답 형식 (JSON만 출력, 다른 텍스트 없이)
 {
   "studentName": "홍길동",
   "birthDate": "0315",
-  "selectedSubject": "화작" 또는 "언매",
-  "answers": [2, 5, 3, 1, 4, ...] 
+  "selectedSubject": "화작",
+  "answers": [2, 5, 3, 1, 4, 2, 3, 5, 1, 2, ...]
 }
 
-주의사항:
-- 마킹이 불분명하면 0으로 표시
-- 복수 마킹은 첫 번째 마킹 번호 사용
-- answers 배열은 정확히 ${exam.totalQuestions}개여야 함
-- JSON만 출력하고 다른 설명은 하지 마세요`;
+## 주의사항
+- 마킹이 없거나 불분명하면 0으로 표시
+- 복수 마킹은 더 진한 것 선택, 동일하면 0
+- answers 배열은 정확히 ${exam.totalQuestions}개
+- JSON만 출력하세요`;
 
     const response = await fetch('/api/analyze-omr', {
       method: 'POST',
@@ -168,7 +235,12 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     try {
       const jsonMatch = data.result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        // answers가 부족하면 0으로 채우기
+        while (parsed.answers.length < exam.totalQuestions) {
+          parsed.answers.push(0);
+        }
+        return parsed;
       }
     } catch (e) {
       console.error('JSON 파싱 오류:', e);
@@ -186,11 +258,7 @@ export default function OMRBatchGrading({ exams, students, branch }) {
   const updateScanResult = (index, field, value) => {
     setScanResults(prev => {
       const updated = [...prev];
-      if (field === 'answers') {
-        updated[index].answers = value;
-      } else {
-        updated[index][field] = value;
-      }
+      updated[index][field] = value;
       return updated;
     });
   };
@@ -222,15 +290,21 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     const saved = [];
 
     for (const result of scanResults) {
-      if (result.error || !result.studentName) continue;
+      if (result.error) {
+        saved.push({ ...result, saveStatus: 'error', message: '인식 실패' });
+        continue;
+      }
+
+      // 매칭된 학생 ID 사용
+      const studentId = result.matchedStudentId;
+      
+      if (!studentId) {
+        saved.push({ ...result, saveStatus: 'not_found', message: '학생을 선택해주세요' });
+        continue;
+      }
 
       try {
-        // 학생 찾기 (이름 + 생일로 매칭)
-        const student = students.find(s => 
-          s.name === result.studentName && 
-          (s.birthDate === result.birthDate || s.birthDate?.includes(result.birthDate))
-        );
-
+        const student = students.find(s => s.id === studentId);
         if (!student) {
           saved.push({ ...result, saveStatus: 'not_found', message: '학생을 찾을 수 없음' });
           continue;
@@ -242,7 +316,7 @@ export default function OMRBatchGrading({ exams, students, branch }) {
         // 학생 데이터 업데이트
         const studentsRef = collection(db, 'students');
         const snapshot = await getDocs(studentsRef);
-        const studentDoc = snapshot.docs.find(doc => doc.data().id === student.id);
+        const studentDoc = snapshot.docs.find(doc => doc.data().id === studentId);
 
         if (studentDoc) {
           const studentData = studentDoc.data();
@@ -261,7 +335,7 @@ export default function OMRBatchGrading({ exams, students, branch }) {
             results: gradingResult.results,
             typeStats: gradingResult.typeStats,
             weakTypes: gradingResult.weakTypes,
-            selectedSubject: result.selectedSubject,
+            selectedSubject: result.selectedSubject || '화작',
             feedback: generateFeedback(gradingResult.weakTypes, gradingResult.typeStats)
           };
 
@@ -287,7 +361,9 @@ export default function OMRBatchGrading({ exams, students, branch }) {
 
     setSavedResults(saved);
     setIsSaving(false);
-    alert(`${saved.filter(s => s.saveStatus === 'success').length}명의 성적이 저장되었습니다.`);
+    
+    const successCount = saved.filter(s => s.saveStatus === 'success').length;
+    alert(`${successCount}명의 성적이 저장되었습니다.`);
   };
 
   // 채점 함수
@@ -300,8 +376,8 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     exam.answers.forEach((correctAnswer, index) => {
       const studentAnswer = studentAnswers[index] || 0;
       const isCorrect = studentAnswer === parseInt(correctAnswer);
-      const score = exam.scores[index] || 2;
-      const type = exam.types[index] || '독서_정보 독해';
+      const score = exam.scores?.[index] || 2;
+      const type = exam.types?.[index] || '독서_정보 독해';
 
       maxScore += score;
       if (isCorrect) totalScore += score;
@@ -477,36 +553,44 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       {/* OMR 스캔 채점 탭 */}
       {activeTab === 'scan' && (
         <div className="space-y-6">
-          {/* 이미지 업로드 */}
+          {/* PDF 업로드 */}
           <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
             <input
               type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
+              accept="application/pdf"
+              onChange={handlePdfUpload}
               className="hidden"
-              id="omr-upload"
+              id="pdf-upload"
             />
             <label 
-              htmlFor="omr-upload"
+              htmlFor="pdf-upload"
               className="cursor-pointer"
             >
-              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-              <p className="text-gray-600">
-                OMR 이미지를 드래그하거나 클릭하여 업로드
-              </p>
-              <p className="text-sm text-gray-400 mt-1">
-                여러 장 동시 업로드 가능 (JPG, PNG)
-              </p>
+              {isLoadingPdf ? (
+                <>
+                  <Loader2 className="mx-auto h-12 w-12 text-indigo-500 animate-spin mb-3" />
+                  <p className="text-indigo-600 font-medium">PDF 처리 중...</p>
+                </>
+              ) : (
+                <>
+                  <File className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                  <p className="text-gray-600">
+                    <span className="font-medium text-indigo-600">PDF 파일</span>을 클릭하여 업로드
+                  </p>
+                  <p className="text-sm text-gray-400 mt-1">
+                    스캔된 OMR PDF 파일 (여러 페이지 지원)
+                  </p>
+                </>
+              )}
             </label>
           </div>
 
-          {/* 업로드된 이미지 미리보기 */}
-          {omrImages.length > 0 && (
+          {/* 업로드된 페이지 미리보기 */}
+          {pdfPages.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-gray-700">
-                  업로드된 이미지 ({omrImages.length}장)
+                  추출된 OMR ({pdfPages.length}장)
                 </h3>
                 <button
                   onClick={scanOMRWithVision}
@@ -528,20 +612,20 @@ export default function OMRBatchGrading({ exams, students, branch }) {
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {omrImages.map((img, index) => (
+                {pdfPages.map((page, index) => (
                   <div key={index} className="relative group">
                     <img
-                      src={img.preview}
-                      alt={`OMR ${index + 1}`}
-                      className="w-full h-32 object-cover rounded-lg border"
+                      src={page.preview}
+                      alt={`OMR ${page.pageNum}페이지`}
+                      className="w-full h-40 object-contain rounded-lg border bg-gray-100"
                     />
                     <button
-                      onClick={() => removeImage(index)}
+                      onClick={() => removePage(index)}
                       className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition"
                     >
                       <X size={14} />
                     </button>
-                    <p className="text-xs text-gray-500 mt-1 truncate">{img.name}</p>
+                    <p className="text-xs text-gray-500 mt-1 text-center">{page.pageNum}페이지</p>
                   </div>
                 ))}
               </div>
@@ -579,7 +663,8 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="px-3 py-2 text-left text-sm font-semibold">상태</th>
-                      <th className="px-3 py-2 text-left text-sm font-semibold">이름</th>
+                      <th className="px-3 py-2 text-left text-sm font-semibold">인식된 이름</th>
+                      <th className="px-3 py-2 text-left text-sm font-semibold">학생 선택</th>
                       <th className="px-3 py-2 text-left text-sm font-semibold">생일</th>
                       <th className="px-3 py-2 text-left text-sm font-semibold">선택과목</th>
                       <th className="px-3 py-2 text-left text-sm font-semibold">답안 미리보기</th>
@@ -588,47 +673,55 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                   </thead>
                   <tbody>
                     {scanResults.map((result, index) => {
-                      const saved = savedResults.find(s => s.imageIndex === index);
+                      const saved = savedResults.find(s => s.pageIndex === index);
                       
                       return (
                         <React.Fragment key={index}>
                           <tr className={`border-b hover:bg-gray-50 ${result.error ? 'bg-red-50' : ''}`}>
                             <td className="px-3 py-2">
                               {saved?.saveStatus === 'success' ? (
-                                <span className="text-green-600 flex items-center gap-1">
-                                  <CheckCircle size={16} /> 저장됨 ({saved.score}/{saved.maxScore})
+                                <span className="text-green-600 flex items-center gap-1 text-sm">
+                                  <CheckCircle size={16} /> {saved.score}/{saved.maxScore}
                                 </span>
                               ) : saved?.saveStatus === 'not_found' ? (
-                                <span className="text-yellow-600 flex items-center gap-1">
-                                  <AlertCircle size={16} /> 학생 없음
+                                <span className="text-yellow-600 flex items-center gap-1 text-sm">
+                                  <AlertCircle size={16} /> 학생 선택 필요
                                 </span>
                               ) : saved?.saveStatus === 'error' ? (
-                                <span className="text-red-600 flex items-center gap-1">
+                                <span className="text-red-600 flex items-center gap-1 text-sm">
                                   <AlertCircle size={16} /> 오류
                                 </span>
                               ) : result.error ? (
-                                <span className="text-red-600 flex items-center gap-1">
+                                <span className="text-red-600 flex items-center gap-1 text-sm">
                                   <AlertCircle size={16} /> 인식 실패
                                 </span>
                               ) : (
-                                <span className="text-gray-400">대기</span>
+                                <span className="text-gray-400 text-sm">대기</span>
                               )}
                             </td>
+                            <td className="px-3 py-2 text-sm text-gray-600">
+                              {result.studentName || '(인식 안됨)'}
+                            </td>
                             <td className="px-3 py-2">
-                              <input
-                                type="text"
-                                value={result.studentName || ''}
-                                onChange={(e) => updateScanResult(index, 'studentName', e.target.value)}
-                                className="w-24 px-2 py-1 border rounded text-sm"
-                                placeholder="이름"
-                              />
+                              <select
+                                value={result.matchedStudentId || ''}
+                                onChange={(e) => updateScanResult(index, 'matchedStudentId', e.target.value)}
+                                className="w-32 px-2 py-1 border rounded text-sm"
+                              >
+                                <option value="">-- 선택 --</option>
+                                {students.map(s => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} ({s.grade})
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                             <td className="px-3 py-2">
                               <input
                                 type="text"
                                 value={result.birthDate || ''}
                                 onChange={(e) => updateScanResult(index, 'birthDate', e.target.value)}
-                                className="w-20 px-2 py-1 border rounded text-sm"
+                                className="w-16 px-2 py-1 border rounded text-sm"
                                 placeholder="MMDD"
                               />
                             </td>
@@ -643,7 +736,12 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                               </select>
                             </td>
                             <td className="px-3 py-2 text-sm text-gray-600">
-                              {result.answers?.slice(0, 10).join(', ')}...
+                              {result.answers?.slice(0, 10).map((a, i) => (
+                                <span key={i} className={a === 0 ? 'text-red-400' : ''}>
+                                  {a || '-'}
+                                  {i < 9 ? ', ' : '...'}
+                                </span>
+                              ))}
                             </td>
                             <td className="px-3 py-2 text-center">
                               <button
@@ -658,7 +756,7 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                           {/* 답안 수정 확장 행 */}
                           {editingIndex === index && (
                             <tr>
-                              <td colSpan={6} className="px-3 py-4 bg-gray-50">
+                              <td colSpan={7} className="px-3 py-4 bg-gray-50">
                                 <div className="grid grid-cols-5 md:grid-cols-9 gap-2">
                                   {result.answers?.map((ans, ansIdx) => (
                                     <div key={ansIdx} className="flex items-center gap-1">
@@ -666,7 +764,9 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                                       <select
                                         value={ans || 0}
                                         onChange={(e) => updateAnswer(index, ansIdx, e.target.value)}
-                                        className="w-12 px-1 py-1 border rounded text-sm"
+                                        className={`w-12 px-1 py-1 border rounded text-sm ${
+                                          ans === 0 ? 'border-red-300 bg-red-50' : ''
+                                        }`}
                                       >
                                         <option value={0}>-</option>
                                         <option value={1}>①</option>
