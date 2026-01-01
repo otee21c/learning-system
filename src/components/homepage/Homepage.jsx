@@ -320,7 +320,7 @@ export default function Homepage() {
                 <span className="hp-highlight hp-dropdown-trigger">회원 전용 ▼</span>
                 <ul className="hp-dropdown-menu">
                   <li><Link to="/lms">학생 로그인</Link></li>
-                  <li><Link to="/parent-report">학부모 로그인</Link></li>
+                  <li><Link to="/lms">관리자 로그인</Link></li>
                 </ul>
               </li>
             </ul>

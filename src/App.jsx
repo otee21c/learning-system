@@ -213,9 +213,6 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <div className="text-left">
                     <p className="text-2xl font-bold">{branch.name}</p>
-                    <p className="text-white/80 text-sm mt-1">
-                      {allStudents.filter(s => (s.branch || 'gwangjin') === branch.id).length}명의 학생
-                    </p>
                   </div>
                   <MapPin size={32} className="text-white/80" />
                 </div>
