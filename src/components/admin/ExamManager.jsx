@@ -9,28 +9,30 @@ export default function ExamManager({ exams, students, branch }) {
     title: '',
     date: '',
     subject: '국어',
-    totalQuestions: 40,
-    answers: Array(40).fill(''),
-    scores: Array(40).fill(2),
-    types: Array(40).fill('정보 독해')
+    totalQuestions: 45,
+    answers: Array(45).fill(''),
+    scores: Array(45).fill(2),
+    types: Array(45).fill('독서_정보 독해'),
+    gradeTable: [] // 등급 기준표 (선택)
   });
 
   const [editingExam, setEditingExam] = useState(null);
 
   const questionTypes = [
-    '정보 독해', '의미 독해', '보기 독해', 
-    '어휘 독해', '문법 독해', '화작 독해'
+    '독서_정보 독해', '독서_의미 독해', '독서_보기 독해', 
+    '문학_정보 독해', '문학_의미 독해', '문학_보기 독해',
+    '화작 영역', '언매 영역'
   ];
 
   // 문제 수 변경 시 배열 조정
   const updateExamQuestions = (count) => {
-    const num = parseInt(count) || 40;
+    const num = parseInt(count) || 45;
     setNewExam({
       ...newExam,
       totalQuestions: num,
       answers: Array(num).fill(''),
       scores: Array(num).fill(2),
-      types: Array(num).fill('정보 독해')
+      types: Array(num).fill('독서_정보 독해')
     });
   };
 
@@ -66,10 +68,11 @@ export default function ExamManager({ exams, students, branch }) {
         title: '',
         date: '',
         subject: '국어',
-        totalQuestions: 40,
-        answers: Array(40).fill(''),
-        scores: Array(40).fill(2),
-        types: Array(40).fill('정보 독해')
+        totalQuestions: 45,
+        answers: Array(45).fill(''),
+        scores: Array(45).fill(2),
+        types: Array(45).fill('독서_정보 독해'),
+        gradeTable: []
       });
       
       alert('시험이 추가되었습니다.');
