@@ -639,34 +639,36 @@ const StudentDashboard = ({ students = [], branch }) => {
 
                         <td className="px-4 py-3">
                           {isEditingMemo ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
+                            <div className="flex flex-col gap-2">
+                              <textarea
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
-                                className="flex-1 px-2 py-1 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm"
+                                className="w-full px-2 py-1 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+                                rows={3}
                                 autoFocus
+                                placeholder="메모 입력 (Enter로 줄바꿈)"
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleMemoSave(student.id, editValue);
                                   if (e.key === 'Escape') cancelEdit();
                                 }}
                               />
-                              <button
-                                onClick={() => handleMemoSave(student.id, editValue)}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded"
-                              >
-                                <Save size={16} />
-                              </button>
-                              <button
-                                onClick={cancelEdit}
-                                className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                              >
-                                <X size={16} />
-                              </button>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => handleMemoSave(student.id, editValue)}
+                                  className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm hover:bg-gray-400"
+                                >
+                                  취소
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div 
-                              className="text-sm text-gray-600 truncate max-w-xs cursor-pointer hover:text-indigo-600"
+                              className="text-sm text-gray-600 max-w-xs cursor-pointer hover:text-indigo-600 whitespace-pre-wrap"
                               onClick={() => startEdit(student.id, 'memo', memo)}
                               title={memo || '클릭하여 메모 추가'}
                             >

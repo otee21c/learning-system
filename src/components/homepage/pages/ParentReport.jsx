@@ -278,18 +278,11 @@ export default function ParentReport() {
           </Link>
 
           <h1 className="text-2xl font-bold text-center text-gray-800 mb-2 mt-4">
-            학습 보고서 확인
+            국어 컨설팅 보고서
           </h1>
           <p className="text-center text-gray-500 mb-6 text-sm">
             오늘의 국어 연구소
           </p>
-
-          {/* URL 파라미터로 기간이 설정된 경우 안내 */}
-          {hasUrlPeriod && (
-            <div className="mb-4 p-3 bg-emerald-50 rounded-lg text-sm text-emerald-700 text-center">
-              📅 조회 기간: {startMonth}월 {startWeek}주차 ~ {endMonth}월 {endWeek}주차
-            </div>
-          )}
 
           <div className="space-y-4">
             <div>
