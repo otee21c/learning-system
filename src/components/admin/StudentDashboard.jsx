@@ -54,19 +54,46 @@ const StudentDashboard = ({ students = [], branch }) => {
   const [selectedStudentsForSMS, setSelectedStudentsForSMS] = useState([]);
   const [sendingSMS, setSendingSMS] = useState(false);
 
-  // ★ SMS 발송 함수
+  // ★ SMS 발송 함수 (클라이언트에서 직접 Aligo 호출)
   const sendSMS = async (phoneNumber, message) => {
     try {
-      const response = await fetch('/api/send-sms', {
+      const apiKey = import.meta.env.VITE_ALIGO_API_KEY;
+      const userId = import.meta.env.VITE_ALIGO_USER_ID;
+      // 기본 발신번호: 02-562-5559
+      const sender = import.meta.env.VITE_ALIGO_SENDER_MAIN || '025625559';
+
+      if (!apiKey || !userId || !sender) {
+        console.error('❌ Aligo API 설정이 없습니다.');
+        return false;
+      }
+
+      const cleanPhone = phoneNumber.replace(/-/g, '');
+
+      const formData = new URLSearchParams();
+      formData.append('key', apiKey);
+      formData.append('user_id', userId);
+      formData.append('sender', sender);
+      formData.append('receiver', cleanPhone);
+      formData.append('msg', message);
+      formData.append('testmode_yn', 'N');
+
+      const response = await fetch('https://apis.aligo.in/send/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receiver: phoneNumber.replace(/-/g, ''),
-          msg: message
-        })
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString()
       });
-      const data = await response.json();
-      return data.success;
+
+      const result = await response.json();
+      
+      if (result.result_code === '1') {
+        console.log('✅ SMS 발송 성공:', cleanPhone);
+        return true;
+      } else {
+        console.error('❌ SMS 발송 실패:', result.message);
+        return false;
+      }
     } catch (error) {
       console.error('SMS 발송 오류:', error);
       return false;
