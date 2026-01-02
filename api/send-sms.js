@@ -20,11 +20,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'receiver와 msg가 필요합니다.' });
     }
 
+    // 기본 발신번호 (변경 시 여기만 수정)
+    const DEFAULT_SENDER = '025625559';
+
     // Aligo SMS API 호출
     const formData = new URLSearchParams({
-      key: process.env.ALIGO_API_KEY,
-      user_id: process.env.ALIGO_USER_ID,
-      sender: process.env.ALIGO_SENDER,
+      key: process.env.VITE_ALIGO_API_KEY,
+      user_id: process.env.VITE_ALIGO_USER_ID,
+      sender: process.env.VITE_ALIGO_SENDER || DEFAULT_SENDER,
       receiver: receiver.replace(/-/g, ''),
       msg: msg,
       testmode_yn: 'N' // 실제 발송: N, 테스트: Y
