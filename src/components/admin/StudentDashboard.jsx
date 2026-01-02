@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
-  CheckCircle, XCircle, Clock, AlertCircle, Plus
+  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
@@ -15,6 +15,8 @@ const StudentDashboard = ({ students = [], branch }) => {
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
   const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
   const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter, setGradeFilter] = useState(''); // 학년 필터
+  const [schoolFilter, setSchoolFilter] = useState(''); // 학교 필터
   
   // 데이터 상태
   const [attendanceData, setAttendanceData] = useState([]);
@@ -47,6 +49,112 @@ const StudentDashboard = ({ students = [], branch }) => {
     note: ''
   });
   const [savingScore, setSavingScore] = useState(false);
+
+  // ★ 문자 발송 관련 상태
+  const [selectedStudentsForSMS, setSelectedStudentsForSMS] = useState([]);
+  const [sendingSMS, setSendingSMS] = useState(false);
+
+  // ★ SMS 발송 함수
+  const sendSMS = async (phoneNumber, message) => {
+    try {
+      const response = await fetch('/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiver: phoneNumber.replace(/-/g, ''),
+          msg: message
+        })
+      });
+      const data = await response.json();
+      return data.success;
+    } catch (error) {
+      console.error('SMS 발송 오류:', error);
+      return false;
+    }
+  };
+
+  // ★ 개별 지각/결석 문자 발송
+  const sendAttendanceSMS = async (student, status) => {
+    if (!student.parentPhone) {
+      alert(`${student.name} 학생의 학부모 연락처가 없습니다.`);
+      return;
+    }
+
+    const statusText = status === '지각' ? '아직 등원하지 않아서' : '결석하여';
+    const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
+
+    setSendingSMS(true);
+    const success = await sendSMS(student.parentPhone, message);
+    setSendingSMS(false);
+
+    if (success) {
+      alert(`${student.name} 학생 학부모님께 문자가 발송되었습니다.`);
+    } else {
+      alert('문자 발송에 실패했습니다.');
+    }
+  };
+
+  // ★ 일괄 문자 발송 (결석/지각)
+  const sendBulkAttendanceSMS = async () => {
+    if (selectedStudentsForSMS.length === 0) {
+      alert('문자를 보낼 학생을 선택해주세요.');
+      return;
+    }
+
+    const studentsToSend = selectedStudentsForSMS
+      .map(id => students.find(s => s.id === id))
+      .filter(s => s && s.parentPhone);
+
+    if (studentsToSend.length === 0) {
+      alert('학부모 연락처가 등록된 학생이 없습니다.');
+      return;
+    }
+
+    if (!confirm(`${studentsToSend.length}명의 학부모님께 문자를 발송하시겠습니까?`)) {
+      return;
+    }
+
+    setSendingSMS(true);
+    let successCount = 0;
+
+    for (const student of studentsToSend) {
+      const status = getAttendanceStatus(student.id);
+      const statusText = status === '지각' ? '아직 등원하지 않아서' : status === '결석' ? '결석하여' : '출결 관련으로';
+      const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
+
+      const success = await sendSMS(student.parentPhone, message);
+      if (success) successCount++;
+    }
+
+    setSendingSMS(false);
+    setSelectedStudentsForSMS([]);
+    alert(`${successCount}명의 학부모님께 문자가 발송되었습니다.`);
+  };
+
+  // ★ 학생 선택 토글 (문자용)
+  const toggleStudentForSMS = (studentId) => {
+    setSelectedStudentsForSMS(prev => 
+      prev.includes(studentId) 
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  // ★ 전체 선택/해제 (결석/지각 학생만)
+  const toggleSelectAllAbsent = () => {
+    const absentStudents = filteredStudents.filter(s => {
+      const status = getAttendanceStatus(s.id);
+      return status === '결석' || status === '지각';
+    });
+
+    const allSelected = absentStudents.every(s => selectedStudentsForSMS.includes(s.id));
+    
+    if (allSelected) {
+      setSelectedStudentsForSMS(prev => prev.filter(id => !absentStudents.some(s => s.id === id)));
+    } else {
+      setSelectedStudentsForSMS(prev => [...new Set([...prev, ...absentStudents.map(s => s.id)])]);
+    }
+  };
 
   // 데이터 로드
   useEffect(() => {
@@ -375,11 +483,27 @@ const StudentDashboard = ({ students = [], branch }) => {
   };
 
   // 검색 필터링된 학생 목록
-  const filteredStudents = students.filter(student => 
-    student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.school?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.grade?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    // 검색어 필터
+    const matchesSearch = searchTerm === '' || 
+      student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.school?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.grade?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 학년 필터
+    const matchesGrade = gradeFilter === '' || student.grade === gradeFilter;
+    
+    // 학교 필터
+    const matchesSchool = schoolFilter === '' || student.school === schoolFilter;
+    
+    return matchesSearch && matchesGrade && matchesSchool;
+  });
+
+  // 학년 목록 추출 (중복 제거, 정렬)
+  const gradeList = [...new Set(students.map(s => s.grade).filter(Boolean))].sort();
+  
+  // 학교 목록 추출 (중복 제거, 정렬)
+  const schoolList = [...new Set(students.map(s => s.school).filter(Boolean))].sort();
 
   // 셀 편집 시작
   const startEdit = (studentId, field, currentValue) => {
@@ -450,6 +574,34 @@ const StudentDashboard = ({ students = [], branch }) => {
             >
               {[1,2,3,4,5].map(w => (
                 <option key={w} value={w}>{w}주차</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 학년 필터 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={gradeFilter}
+              onChange={(e) => setGradeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">전체 학년</option>
+              {gradeList.map(grade => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 학교 필터 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={schoolFilter}
+              onChange={(e) => setSchoolFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">전체 학교</option>
+              {schoolList.map(school => (
+                <option key={school} value={school}>{school}</option>
               ))}
             </select>
           </div>
@@ -562,24 +714,46 @@ const StudentDashboard = ({ students = [], branch }) => {
                         </td>
 
                         <td className="px-4 py-3 text-center">
-                          <div className="relative inline-block">
-                            <select
-                              value={attendanceStatus}
-                              onChange={(e) => handleAttendanceChange(student.id, e.target.value)}
-                              className={`appearance-none px-3 py-1 rounded-full text-sm font-medium cursor-pointer border-0 focus:ring-2 focus:ring-indigo-500 ${
-                                attendanceStatus === '출석' ? 'bg-green-100 text-green-700' :
-                                attendanceStatus === '지각' ? 'bg-yellow-100 text-yellow-700' :
-                                attendanceStatus === '결석' ? 'bg-red-100 text-red-700' :
-                                attendanceStatus === '조퇴' ? 'bg-orange-100 text-orange-700' :
-                                'bg-gray-100 text-gray-500'
-                              }`}
-                            >
-                              <option value="-">-</option>
-                              <option value="출석">출석</option>
-                              <option value="지각">지각</option>
-                              <option value="결석">결석</option>
-                              <option value="조퇴">조퇴</option>
-                            </select>
+                          <div className="flex items-center justify-center gap-2">
+                            {/* 문자 발송용 체크박스 (결석/지각만) */}
+                            {(attendanceStatus === '결석' || attendanceStatus === '지각') && (
+                              <input
+                                type="checkbox"
+                                checked={selectedStudentsForSMS.includes(student.id)}
+                                onChange={() => toggleStudentForSMS(student.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            )}
+                            <div className="relative inline-block">
+                              <select
+                                value={attendanceStatus}
+                                onChange={(e) => handleAttendanceChange(student.id, e.target.value)}
+                                className={`appearance-none px-3 py-1 rounded-full text-sm font-medium cursor-pointer border-0 focus:ring-2 focus:ring-indigo-500 ${
+                                  attendanceStatus === '출석' ? 'bg-green-100 text-green-700' :
+                                  attendanceStatus === '지각' ? 'bg-yellow-100 text-yellow-700' :
+                                  attendanceStatus === '결석' ? 'bg-red-100 text-red-700' :
+                                  attendanceStatus === '조퇴' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                <option value="-">-</option>
+                                <option value="출석">출석</option>
+                                <option value="지각">지각</option>
+                                <option value="결석">결석</option>
+                                <option value="조퇴">조퇴</option>
+                              </select>
+                            </div>
+                            {/* 개별 문자 발송 버튼 */}
+                            {(attendanceStatus === '결석' || attendanceStatus === '지각') && (
+                              <button
+                                onClick={() => sendAttendanceSMS(student, attendanceStatus)}
+                                disabled={sendingSMS}
+                                className="p-1 text-blue-500 hover:bg-blue-100 rounded transition disabled:opacity-50"
+                                title="문자 발송"
+                              >
+                                <Send size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
 
@@ -759,31 +933,53 @@ const StudentDashboard = ({ students = [], branch }) => {
         </div>
 
         <div className="bg-gray-50 px-6 py-4 border-t">
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500">전체 학생:</span>
-              <span className="font-semibold text-gray-700">{filteredStudents.length}명</span>
+          <div className="flex flex-wrap gap-6 text-sm items-center justify-between">
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">전체 학생:</span>
+                <span className="font-semibold text-gray-700">{filteredStudents.length}명</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="text-green-500" size={16} />
+                <span className="text-gray-500">출석:</span>
+                <span className="font-semibold text-green-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '출석').length}명
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <XCircle className="text-red-500" size={16} />
+                <span className="text-gray-500">결석:</span>
+                <span className="font-semibold text-red-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '결석').length}명
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="text-yellow-500" size={16} />
+                <span className="text-gray-500">지각:</span>
+                <span className="font-semibold text-yellow-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '지각').length}명
+                </span>
+              </div>
             </div>
+            
+            {/* 문자 발송 버튼 영역 */}
             <div className="flex items-center gap-2">
-              <CheckCircle className="text-green-500" size={16} />
-              <span className="text-gray-500">출석:</span>
-              <span className="font-semibold text-green-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '출석').length}명
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <XCircle className="text-red-500" size={16} />
-              <span className="text-gray-500">결석:</span>
-              <span className="font-semibold text-red-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '결석').length}명
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="text-yellow-500" size={16} />
-              <span className="text-gray-500">지각:</span>
-              <span className="font-semibold text-yellow-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '지각').length}명
-              </span>
+              <button
+                onClick={toggleSelectAllAbsent}
+                className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+              >
+                결석/지각 전체 선택
+              </button>
+              {selectedStudentsForSMS.length > 0 && (
+                <button
+                  onClick={sendBulkAttendanceSMS}
+                  disabled={sendingSMS}
+                  className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Send size={14} />
+                  {sendingSMS ? '발송 중...' : `선택 ${selectedStudentsForSMS.length}명 문자 발송`}
+                </button>
+              )}
             </div>
           </div>
         </div>

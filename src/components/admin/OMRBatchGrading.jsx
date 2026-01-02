@@ -433,13 +433,25 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      // 여백 설정 (mm)
+      const margin = 10;
+      const contentWidth = pdfWidth - (margin * 2);
+      const contentHeight = pdfHeight - (margin * 2);
+      
       const imgWidth = canvas.width;
       const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
       
-      // 첫 페이지
-      pdf.addImage(imgData, 'JPEG', imgX, 0, imgWidth * ratio, imgHeight * ratio);
+      // 비율 계산 (여백 고려)
+      const ratio = Math.min(contentWidth / imgWidth, contentHeight / imgHeight);
+      const scaledWidth = imgWidth * ratio;
+      const scaledHeight = imgHeight * ratio;
+      
+      // 중앙 정렬
+      const imgX = (pdfWidth - scaledWidth) / 2;
+      const imgY = margin; // 상단 여백
+      
+      pdf.addImage(imgData, 'JPEG', imgX, imgY, scaledWidth, scaledHeight);
       
       pdf.save(`성적표_${reportData.student.name}_${reportData.exam.title}.pdf`);
     } catch (error) {
@@ -724,51 +736,51 @@ export default function OMRBatchGrading({ exams, students, branch }) {
 
           {/* 성적표 미리보기 */}
           {reportData && (
-            <div ref={reportRef} className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden" style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <div ref={reportRef} className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden" style={{ maxWidth: '700px', margin: '0 auto' }}>
               {/* 헤더 */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 flex justify-between items-center">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 flex justify-between items-center">
                 <div>
-                  <span className="text-xs bg-blue-500 px-2 py-1 rounded">PERSONAL DIAGNOSIS</span>
+                  <span className="text-xs bg-blue-500 px-2 py-0.5 rounded">PERSONAL DIAGNOSIS</span>
                   <span className="text-xs ml-2 opacity-80">ID: {reportData.student.id?.slice(0,4)}-{new Date().getFullYear()}{String(new Date().getMonth()+1).padStart(2,'0')}</span>
                 </div>
                 <div className="text-right">
                   <div className="text-xs opacity-80">MY TOTAL SCORE</div>
-                  <div className="text-3xl font-bold">{reportData.examResult.totalScore}<span className="text-lg opacity-80">/{reportData.examResult.maxScore}</span></div>
+                  <div className="text-2xl font-bold">{reportData.examResult.totalScore}<span className="text-sm opacity-80">/{reportData.examResult.maxScore}</span></div>
                 </div>
               </div>
 
               {/* 제목 */}
-              <div className="px-6 py-4 border-b">
-                <h1 className="text-2xl font-bold text-gray-800">국어 성취도 분석 리포트</h1>
-                <p className="text-gray-500">{reportData.student.name} 학생 | {reportData.exam.date} {reportData.exam.title}</p>
+              <div className="px-4 py-2 border-b">
+                <h1 className="text-lg font-bold text-gray-800">국어 성취도 분석 리포트</h1>
+                <p className="text-xs text-gray-500">{reportData.student.name} 학생 | {reportData.exam.date} {reportData.exam.title}</p>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-4 space-y-4">
                 {/* 영역별 분석 */}
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-4">
                   {/* 레이더 차트 */}
                   <div>
-                    <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                       영역별 밸런스 분석
                     </h3>
-                    <div className="w-48 h-48 mx-auto">
+                    <div className="w-40 h-40 mx-auto">
                       <RadarChart data={reportData.typeScores} />
                     </div>
                   </div>
 
                   {/* 영역별 성취도 */}
                   <div>
-                    <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                       상세 영역별 성취도
                     </h3>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {Object.entries(reportData.typeScores)
                         .sort((a, b) => b[1] - a[1])
                         .map(([type, rate]) => (
-                          <div key={type} className={`flex justify-between items-center px-3 py-2 rounded ${rate < 70 ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
-                            <span className="text-sm">{type}</span>
+                          <div key={type} className={`flex justify-between items-center px-2 py-1 rounded text-xs ${rate < 70 ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
+                            <span>{type}</span>
                             <span className={`font-bold ${rate >= 80 ? 'text-blue-600' : rate >= 70 ? 'text-gray-700' : 'text-orange-600'}`}>{rate}%</span>
                           </div>
                         ))}
@@ -778,20 +790,20 @@ export default function OMRBatchGrading({ exams, students, branch }) {
 
                 {/* 문항 채점표 */}
                 <div>
-                  <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                     문항 채점표
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-2">
                     {[0, 1].map(col => (
-                      <table key={col} className="w-full text-xs border-collapse">
+                      <table key={col} className="w-full border-collapse" style={{fontSize: '10px'}}>
                         <thead>
                           <tr className="bg-gray-100">
-                            <th className="border px-1 py-1 w-10">문항</th>
-                            <th className="border px-1 py-1">영역/유형</th>
-                            <th className="border px-1 py-1 w-10">배점</th>
-                            <th className="border px-1 py-1 w-10">정답</th>
-                            <th className="border px-1 py-1 w-10">채점</th>
+                            <th className="border px-1 py-0.5 w-8">문항</th>
+                            <th className="border px-1 py-0.5">영역</th>
+                            <th className="border px-1 py-0.5 w-8">배점</th>
+                            <th className="border px-1 py-0.5 w-8">정답</th>
+                            <th className="border px-1 py-0.5 w-8">채점</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -799,11 +811,11 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                             ?.slice(col * Math.ceil(reportData.examResult.results.length / 2), (col + 1) * Math.ceil(reportData.examResult.results.length / 2))
                             .map((r, i) => (
                               <tr key={i} className={!r.isCorrect ? 'bg-red-50' : ''}>
-                                <td className="border px-1 py-0.5 text-center">{r.questionNum}</td>
-                                <td className="border px-1 py-0.5 truncate" style={{maxWidth: '100px'}}>{r.type}</td>
-                                <td className="border px-1 py-0.5 text-center">{r.score}</td>
-                                <td className="border px-1 py-0.5 text-center">{r.correct}</td>
-                                <td className="border px-1 py-0.5 text-center">{r.isCorrect ? <span className="text-blue-600">○</span> : <span className="text-red-600 font-bold">✗</span>}</td>
+                                <td className="border px-1 py-0 text-center">{r.questionNum}</td>
+                                <td className="border px-1 py-0 truncate" style={{maxWidth: '80px'}}>{r.type}</td>
+                                <td className="border px-1 py-0 text-center">{r.score}</td>
+                                <td className="border px-1 py-0 text-center">{r.correct}</td>
+                                <td className="border px-1 py-0 text-center">{r.isCorrect ? <span className="text-blue-600">○</span> : <span className="text-red-600 font-bold">✗</span>}</td>
                               </tr>
                             ))}
                         </tbody>
@@ -813,55 +825,55 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                 </div>
 
                 {/* 퍼스널 진단 */}
-                <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl p-5">
-                  <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-3">
+                  <h3 className="font-bold text-gray-800 mb-2 text-sm flex items-center gap-2">
                     ✨ 오늘의 국어_퍼스널 진단
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white rounded-lg p-4 shadow-sm">
-                      <h4 className="font-semibold text-blue-700 mb-2 text-sm">학습 강점 및 분석</h4>
-                      <p className="text-sm text-gray-600 leading-relaxed">{strengthComment}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-lg p-3 shadow-sm">
+                      <h4 className="font-semibold text-blue-700 mb-1 text-xs">학습 강점 및 분석</h4>
+                      <p className="text-xs text-gray-600 leading-relaxed">{strengthComment}</p>
                     </div>
-                    <div className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-orange-400">
-                      <h4 className="font-semibold text-orange-700 mb-2 text-sm">학습 약점 및 제언</h4>
-                      <p className="text-sm text-gray-600 leading-relaxed">{weaknessComment}</p>
+                    <div className="bg-white rounded-lg p-3 shadow-sm border-l-4 border-orange-400">
+                      <h4 className="font-semibold text-orange-700 mb-1 text-xs">학습 약점 및 제언</h4>
+                      <p className="text-xs text-gray-600 leading-relaxed">{weaknessComment}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* 학습 변화 (이전 시험이 있는 경우) */}
                 {reportData.previousExams.length > 0 && (
-                  <div className="border-t pt-6">
-                    <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <div className="border-t pt-3">
+                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
                       <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
                       학습 변화 추이
                     </h3>
                     
                     {/* 간단한 점수 변화 표시 */}
-                    <div className="flex items-center gap-4 mb-4">
+                    <div className="flex items-center gap-3 mb-2">
                       {[...reportData.previousExams].reverse().slice(-3).map((prev, i) => (
                         <div key={i} className="text-center">
                           <div className="text-xs text-gray-500">{prev.date?.slice(5)}</div>
-                          <div className="text-lg font-bold text-gray-400">{prev.totalScore}</div>
+                          <div className="text-sm font-bold text-gray-400">{prev.totalScore}</div>
                         </div>
                       ))}
-                      <div className="text-2xl text-gray-300">→</div>
+                      <div className="text-lg text-gray-300">→</div>
                       <div className="text-center">
                         <div className="text-xs text-blue-600 font-medium">현재</div>
-                        <div className="text-2xl font-bold text-blue-600">{reportData.examResult.totalScore}</div>
+                        <div className="text-lg font-bold text-blue-600">{reportData.examResult.totalScore}</div>
                       </div>
                     </div>
 
-                    <div className="bg-blue-50 rounded-lg p-4">
-                      <h4 className="font-semibold text-blue-700 mb-2 text-sm">📈 변화 분석</h4>
-                      <p className="text-sm text-gray-600">{changeComment}</p>
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <h4 className="font-semibold text-blue-700 mb-1 text-xs">📈 변화 분석</h4>
+                      <p className="text-xs text-gray-600">{changeComment}</p>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* 푸터 */}
-              <div className="bg-gray-100 px-6 py-3 text-center text-xs text-gray-500">
+              <div className="bg-gray-100 px-4 py-2 text-center text-xs text-gray-500">
                 오늘의 국어 연구소 | {new Date().toLocaleDateString('ko-KR')} 생성
               </div>
             </div>

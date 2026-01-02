@@ -637,7 +637,7 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                       border: '1px solid #ddd'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                       <div>
                         <p style={{ fontWeight: 'bold', fontSize: '16px' }}>
                           {submission.studentName || '학생'}
@@ -645,23 +645,12 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                         <p style={{ color: '#666', fontSize: '14px', marginTop: '5px' }}>
                           제출 시간: {submission.submittedAt && new Date(submission.submittedAt.seconds * 1000).toLocaleString('ko-KR')}
                         </p>
+                        {submission.files && (
+                          <p style={{ color: '#4CAF50', fontSize: '13px', marginTop: '3px' }}>
+                            📎 첨부파일 {submission.files.length}개
+                          </p>
+                        )}
                       </div>
-                      {submission.files?.[0]?.url && (
-                        <a
-                          href={submission.files?.[0]?.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#4CAF50',
-                            color: 'white',
-                            borderRadius: '5px',
-                            textDecoration: 'none'
-                          }}
-                        >
-                          파일 보기
-                        </a>
-                      )}
                       <button
                         onClick={() => handleDeleteSubmission(submission.id)}
                         style={{
@@ -670,13 +659,96 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                           color: 'white',
                           borderRadius: '5px',
                           border: 'none',
-                          cursor: 'pointer',
-                          marginLeft: '10px'
+                          cursor: 'pointer'
                         }}
                       >
                         삭제
                       </button>
                     </div>
+                    
+                    {/* 모든 첨부 파일/이미지 표시 */}
+                    {submission.files && submission.files.length > 0 && (
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', 
+                        gap: '10px',
+                        marginTop: '10px',
+                        padding: '10px',
+                        backgroundColor: '#f9f9f9',
+                        borderRadius: '8px'
+                      }}>
+                        {submission.files.map((file, index) => {
+                          const isImage = file.type?.startsWith('image/') || 
+                                          file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                          
+                          return (
+                            <div key={index} style={{ 
+                              border: '1px solid #ddd', 
+                              borderRadius: '8px', 
+                              overflow: 'hidden',
+                              backgroundColor: 'white'
+                            }}>
+                              {isImage ? (
+                                <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                  <img 
+                                    src={file.url} 
+                                    alt={`첨부 ${index + 1}`}
+                                    style={{ 
+                                      width: '100%', 
+                                      height: '120px', 
+                                      objectFit: 'cover',
+                                      cursor: 'pointer'
+                                    }}
+                                  />
+                                </a>
+                              ) : (
+                                <div style={{ 
+                                  height: '120px', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  backgroundColor: '#f0f0f0'
+                                }}>
+                                  <span style={{ fontSize: '12px', color: '#666' }}>📄 파일</span>
+                                </div>
+                              )}
+                              <div style={{ padding: '8px', textAlign: 'center' }}>
+                                <a
+                                  href={file.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    fontSize: '12px',
+                                    color: '#4CAF50',
+                                    textDecoration: 'none'
+                                  }}
+                                >
+                                  {index + 1}번 파일 보기
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    {/* 기존 imageUrl 필드 지원 (하위 호환) */}
+                    {submission.imageUrl && !submission.files && (
+                      <div style={{ marginTop: '10px' }}>
+                        <a href={submission.imageUrl} target="_blank" rel="noopener noreferrer">
+                          <img 
+                            src={submission.imageUrl} 
+                            alt="제출 이미지"
+                            style={{ 
+                              maxWidth: '200px', 
+                              borderRadius: '8px',
+                              border: '1px solid #ddd'
+                            }}
+                          />
+                        </a>
+                      </div>
+                    )}
+                    
                     {submission.feedback && (
                       <div style={{
                         marginTop: '15px',
