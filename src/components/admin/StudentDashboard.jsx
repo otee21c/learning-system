@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
-  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send
+  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
@@ -53,6 +53,14 @@ const StudentDashboard = ({ students = [], branch }) => {
   // ★ 문자 발송 관련 상태
   const [selectedStudentsForSMS, setSelectedStudentsForSMS] = useState([]);
   const [sendingSMS, setSendingSMS] = useState(false);
+
+  // ★ 학교 성적 관련 상태
+  const [schoolGradesData, setSchoolGradesData] = useState([]);
+  const [schoolGradeModal, setSchoolGradeModal] = useState({ isOpen: false, studentId: '', studentName: '' });
+  
+  // ★ 과제 제출물 모달 상태
+  const [submissionsModal, setSubmissionsModal] = useState({ isOpen: false, studentId: '', studentName: '' });
+  const [studentSubmissions, setStudentSubmissions] = useState([]);
 
   // ★ SMS 발송 함수 (클라이언트에서 직접 Aligo 호출)
   const sendSMS = async (phoneNumber, message) => {
@@ -206,6 +214,10 @@ const StudentDashboard = ({ students = [], branch }) => {
       const memoSnapshot = await getDocs(collection(db, 'studentMemos'));
       setMemoData(memoSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
+      // 학교 성적 로드
+      const schoolGradesSnapshot = await getDocs(collection(db, 'schoolGrades'));
+      setSchoolGradesData(schoolGradesSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
+
     } catch (error) {
       console.error('데이터 로드 실패:', error);
     }
@@ -230,6 +242,34 @@ const StudentDashboard = ({ students = [], branch }) => {
       c.weekNumber === selectedWeek
     );
     return record ? true : false;
+  };
+
+  // 학생별 학교 성적 가져오기
+  const getSchoolGrades = (studentId) => {
+    return schoolGradesData
+      .filter(g => g.studentId === studentId)
+      .sort((a, b) => {
+        if (b.year !== a.year) return b.year - a.year;
+        return b.semester - a.semester;
+      });
+  };
+
+  // 학생별 모든 과제 제출물 가져오기
+  const getStudentAllSubmissions = (studentId) => {
+    return homeworkData
+      .filter(h => h.studentId === studentId && (h.files?.length > 0 || h.imageUrl))
+      .sort((a, b) => {
+        const dateA = a.submittedAt?.seconds || 0;
+        const dateB = b.submittedAt?.seconds || 0;
+        return dateB - dateA;
+      });
+  };
+
+  // 과제 제출물 모달 열기
+  const openSubmissionsModal = (student) => {
+    const submissions = getStudentAllSubmissions(student.id);
+    setStudentSubmissions(submissions);
+    setSubmissionsModal({ isOpen: true, studentId: student.id, studentName: student.name });
   };
 
   // 학생별 숙제 현황 가져오기
@@ -686,6 +726,12 @@ const StudentDashboard = ({ students = [], branch }) => {
                     과제
                   </div>
                 </th>
+                <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-24">
+                  <div className="flex items-center justify-center gap-2">
+                    <Image size={16} />
+                    제출물
+                  </div>
+                </th>
                 <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-32">
                   <div className="flex items-center justify-center gap-2">
                     <FileText size={16} />
@@ -706,7 +752,7 @@ const StudentDashboard = ({ students = [], branch }) => {
             <tbody>
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                     {searchTerm ? '검색 결과가 없습니다.' : '등록된 학생이 없습니다.'}
                   </td>
                 </tr>
@@ -814,6 +860,17 @@ const StudentDashboard = ({ students = [], branch }) => {
                           </select>
                         </td>
 
+                        {/* ★ 제출물 - 학생별 모든 과제 사진 보기 */}
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => openSubmissionsModal(student)}
+                            className="px-2 py-1 bg-purple-100 text-purple-600 rounded-lg text-xs font-medium hover:bg-purple-200 transition flex items-center gap-1 mx-auto"
+                          >
+                            <Image size={14} />
+                            {getStudentAllSubmissions(student.id).length}개
+                          </button>
+                        </td>
+
                         {/* ★ 성적 - 클릭하면 입력 모달 열림 */}
                         <td className="px-4 py-3 text-center">
                           <button
@@ -902,8 +959,8 @@ const StudentDashboard = ({ students = [], branch }) => {
 
                       {isExpanded && (
                         <tr className="bg-indigo-50/50">
-                          <td colSpan={8} className="px-6 py-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <td colSpan={9} className="px-6 py-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                               <div className="bg-white rounded-lg p-4 shadow-sm">
                                 <h4 className="font-medium text-gray-700 mb-2">📞 연락처</h4>
                                 <p className="text-sm text-gray-600">학생: {student.phone || '-'}</p>
@@ -944,6 +1001,24 @@ const StudentDashboard = ({ students = [], branch }) => {
                                   }
                                   {memoData.filter(m => m.studentId === student.id).length === 0 && (
                                     <p className="text-xs text-gray-400">메모 없음</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* 학교 성적 */}
+                              <div className="bg-white rounded-lg p-4 shadow-sm">
+                                <h4 className="font-medium text-gray-700 mb-2">📊 학교 성적</h4>
+                                <div className="space-y-1 max-h-20 overflow-y-auto">
+                                  {getSchoolGrades(student.id).slice(0, 3).map((g, idx) => (
+                                    <p key={idx} className="text-xs text-gray-600">
+                                      <span className="text-gray-400">{g.year} {g.semester}학기 {g.examType}:</span>{' '}
+                                      {g.score && `${g.score}점`}
+                                      {g.grade && ` ${g.grade}등급`}
+                                      {g.rank && g.totalStudents && ` (${g.rank}/${g.totalStudents})`}
+                                    </p>
+                                  ))}
+                                  {getSchoolGrades(student.id).length === 0 && (
+                                    <p className="text-xs text-gray-400">등록된 성적 없음</p>
                                   )}
                                 </div>
                               </div>
@@ -1109,6 +1184,105 @@ const StudentDashboard = ({ students = [], branch }) => {
               >
                 {savingScore ? '저장 중...' : '저장'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 과제 제출물 모달 */}
+      {submissionsModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">
+                📷 {submissionsModal.studentName} - 과제 제출물
+              </h3>
+              <button
+                onClick={() => setSubmissionsModal({ isOpen: false, studentId: '', studentName: '' })}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {studentSubmissions.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Image size={48} className="mx-auto mb-4 opacity-50" />
+                  <p>제출된 과제가 없습니다.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {studentSubmissions.map((sub, idx) => {
+                    const assignment = assignmentsData.find(a => a.id === sub.homeworkId || a.docId === sub.homeworkId);
+                    return (
+                      <div key={idx} className="border rounded-xl p-4 bg-gray-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-semibold text-gray-800">
+                              {assignment?.title || sub.homeworkId || '과제'}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              제출: {sub.submittedAt?.seconds 
+                                ? new Date(sub.submittedAt.seconds * 1000).toLocaleString('ko-KR')
+                                : '-'}
+                            </p>
+                          </div>
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                            {sub.files?.length || 1}개 파일
+                          </span>
+                        </div>
+                        
+                        {/* 이미지 그리드 */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {sub.files?.map((file, fIdx) => {
+                            const isImage = file.type?.startsWith('image/') || 
+                                            file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                            return (
+                              <a 
+                                key={fIdx} 
+                                href={file.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="block border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
+                              >
+                                {isImage ? (
+                                  <img 
+                                    src={file.url} 
+                                    alt={`제출물 ${fIdx + 1}`}
+                                    className="w-full h-32 object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100">
+                                    <FileText size={32} className="text-gray-400" />
+                                  </div>
+                                )}
+                                <p className="text-xs text-center py-2 text-blue-600">파일 {fIdx + 1}</p>
+                              </a>
+                            );
+                          })}
+                          {/* 기존 imageUrl 지원 */}
+                          {sub.imageUrl && !sub.files && (
+                            <a 
+                              href={sub.imageUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="block border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
+                            >
+                              <img 
+                                src={sub.imageUrl} 
+                                alt="제출물"
+                                className="w-full h-32 object-cover"
+                              />
+                              <p className="text-xs text-center py-2 text-blue-600">보기</p>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
