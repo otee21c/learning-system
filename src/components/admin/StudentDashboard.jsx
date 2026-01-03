@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
-  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2
+  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2, Download
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
@@ -108,10 +108,10 @@ const StudentDashboard = ({ students = [], branch }) => {
     }
   };
 
-  // ★ 개별 지각/결석 문자 발송
+  // ★ 개별 지각/결석 문자 발송 (학부모 + 학생)
   const sendAttendanceSMS = async (student, status) => {
-    if (!student.parentPhone) {
-      alert(`${student.name} 학생의 학부모 연락처가 없습니다.`);
+    if (!student.parentPhone && !student.phone) {
+      alert(`${student.name} 학생의 연락처가 없습니다.`);
       return;
     }
 
@@ -119,17 +119,30 @@ const StudentDashboard = ({ students = [], branch }) => {
     const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
 
     setSendingSMS(true);
-    const success = await sendSMS(student.parentPhone, message);
+    let sentTo = [];
+    
+    // 학부모에게 발송
+    if (student.parentPhone) {
+      const parentSuccess = await sendSMS(student.parentPhone, message);
+      if (parentSuccess) sentTo.push('학부모');
+    }
+    
+    // 학생에게도 발송
+    if (student.phone) {
+      const studentSuccess = await sendSMS(student.phone, message);
+      if (studentSuccess) sentTo.push('학생');
+    }
+    
     setSendingSMS(false);
 
-    if (success) {
-      alert(`${student.name} 학생 학부모님께 문자가 발송되었습니다.`);
+    if (sentTo.length > 0) {
+      alert(`${student.name} - ${sentTo.join(', ')}에게 문자가 발송되었습니다.`);
     } else {
       alert('문자 발송에 실패했습니다.');
     }
   };
 
-  // ★ 일괄 문자 발송 (결석/지각)
+  // ★ 일괄 문자 발송 (결석/지각) - 학부모 + 학생
   const sendBulkAttendanceSMS = async () => {
     if (selectedStudentsForSMS.length === 0) {
       alert('문자를 보낼 학생을 선택해주세요.');
@@ -138,32 +151,41 @@ const StudentDashboard = ({ students = [], branch }) => {
 
     const studentsToSend = selectedStudentsForSMS
       .map(id => students.find(s => s.id === id))
-      .filter(s => s && s.parentPhone);
+      .filter(s => s && (s.parentPhone || s.phone));
 
     if (studentsToSend.length === 0) {
-      alert('학부모 연락처가 등록된 학생이 없습니다.');
+      alert('연락처가 등록된 학생이 없습니다.');
       return;
     }
 
-    if (!confirm(`${studentsToSend.length}명의 학부모님께 문자를 발송하시겠습니까?`)) {
+    if (!confirm(`${studentsToSend.length}명의 학생/학부모님께 문자를 발송하시겠습니까?`)) {
       return;
     }
 
     setSendingSMS(true);
-    let successCount = 0;
+    let totalSent = 0;
 
     for (const student of studentsToSend) {
       const status = getAttendanceStatus(student.id);
       const statusText = status === '지각' ? '아직 등원하지 않아서' : status === '결석' ? '결석하여' : '출결 관련으로';
       const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
 
-      const success = await sendSMS(student.parentPhone, message);
-      if (success) successCount++;
+      // 학부모에게 발송
+      if (student.parentPhone) {
+        const success = await sendSMS(student.parentPhone, message);
+        if (success) totalSent++;
+      }
+      
+      // 학생에게도 발송
+      if (student.phone) {
+        const success = await sendSMS(student.phone, message);
+        if (success) totalSent++;
+      }
     }
 
     setSendingSMS(false);
     setSelectedStudentsForSMS([]);
-    alert(`${successCount}명의 학부모님께 문자가 발송되었습니다.`);
+    alert(`총 ${totalSent}건의 문자가 발송되었습니다. (학생 + 학부모)`);
   };
 
   // ★ 학생 선택 토글 (문자용)
@@ -270,6 +292,24 @@ const StudentDashboard = ({ students = [], branch }) => {
     const submissions = getStudentAllSubmissions(student.id);
     setStudentSubmissions(submissions);
     setSubmissionsModal({ isOpen: true, studentId: student.id, studentName: student.name });
+  };
+
+  // 과제 제출물 삭제
+  const handleDeleteSubmission = async (submissionDocId) => {
+    if (!confirm('이 제출물을 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteDoc(doc(db, 'homeworkSubmissions', submissionDocId));
+      
+      // 로컬 상태 업데이트
+      setHomeworkData(prev => prev.filter(h => h.docId !== submissionDocId));
+      setStudentSubmissions(prev => prev.filter(s => s.docId !== submissionDocId));
+      
+      alert('삭제되었습니다.');
+    } catch (error) {
+      console.error('제출물 삭제 실패:', error);
+      alert('삭제에 실패했습니다.');
+    }
   };
 
   // 학생별 숙제 현황 가져오기
@@ -1228,54 +1268,102 @@ const StudentDashboard = ({ students = [], branch }) => {
                                 : '-'}
                             </p>
                           </div>
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            {sub.files?.length || 1}개 파일
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              {sub.files?.length || 1}개 파일
+                            </span>
+                            <button
+                              onClick={() => handleDeleteSubmission(sub.docId)}
+                              className="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200 transition"
+                              title="제출물 삭제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                         
-                        {/* 이미지 그리드 */}
+                        {/* 파일 그리드 */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           {sub.files?.map((file, fIdx) => {
                             const isImage = file.type?.startsWith('image/') || 
                                             file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                            const isPdf = file.type === 'application/pdf' || 
+                                          file.url?.match(/\.pdf$/i);
+                            
                             return (
-                              <a 
+                              <div 
                                 key={fIdx} 
-                                href={file.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="block border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
+                                className="border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
                               >
                                 {isImage ? (
-                                  <img 
-                                    src={file.url} 
-                                    alt={`제출물 ${fIdx + 1}`}
-                                    className="w-full h-32 object-cover"
-                                  />
+                                  <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                    <img 
+                                      src={file.url} 
+                                      alt={`제출물 ${fIdx + 1}`}
+                                      className="w-full h-32 object-cover cursor-pointer"
+                                    />
+                                  </a>
+                                ) : isPdf ? (
+                                  <div className="w-full h-32 flex flex-col items-center justify-center bg-red-50">
+                                    <FileText size={32} className="text-red-500 mb-1" />
+                                    <span className="text-xs text-red-600 font-medium">PDF</span>
+                                  </div>
                                 ) : (
-                                  <div className="w-full h-32 flex items-center justify-center bg-gray-100">
-                                    <FileText size={32} className="text-gray-400" />
+                                  <div className="w-full h-32 flex flex-col items-center justify-center bg-gray-100">
+                                    <FileText size={32} className="text-gray-400 mb-1" />
+                                    <span className="text-xs text-gray-500">파일</span>
                                   </div>
                                 )}
-                                <p className="text-xs text-center py-2 text-blue-600">파일 {fIdx + 1}</p>
-                              </a>
+                                <div className="p-2 flex justify-center gap-2 border-t">
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    보기
+                                  </a>
+                                  <a
+                                    href={file.url}
+                                    download
+                                    className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                                  >
+                                    <Download size={12} />
+                                    다운
+                                  </a>
+                                </div>
+                              </div>
                             );
                           })}
                           {/* 기존 imageUrl 지원 */}
                           {sub.imageUrl && !sub.files && (
-                            <a 
-                              href={sub.imageUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="block border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
-                            >
-                              <img 
-                                src={sub.imageUrl} 
-                                alt="제출물"
-                                className="w-full h-32 object-cover"
-                              />
-                              <p className="text-xs text-center py-2 text-blue-600">보기</p>
-                            </a>
+                            <div className="border rounded-lg overflow-hidden bg-white hover:shadow-md transition">
+                              <a href={sub.imageUrl} target="_blank" rel="noopener noreferrer">
+                                <img 
+                                  src={sub.imageUrl} 
+                                  alt="제출물"
+                                  className="w-full h-32 object-cover"
+                                />
+                              </a>
+                              <div className="p-2 flex justify-center gap-2 border-t">
+                                <a
+                                  href={sub.imageUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  보기
+                                </a>
+                                <a
+                                  href={sub.imageUrl}
+                                  download
+                                  className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                                >
+                                  <Download size={12} />
+                                  다운
+                                </a>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>

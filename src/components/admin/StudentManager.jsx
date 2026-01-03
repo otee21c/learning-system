@@ -824,6 +824,123 @@ export default function StudentManager({ students, branch }) {
         </div>
       )}
 
+      {/* 학생 정보 수정 모달 (테이블 모드용) */}
+      {editingStudent && viewMode === 'table' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">
+                ✏️ {editingStudent.name} 정보 수정
+              </h3>
+              <button
+                onClick={() => setEditingStudent(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">이름</label>
+                  <input
+                    type="text"
+                    value={editingStudent.name}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학년</label>
+                  <select
+                    value={editingStudent.grade}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, grade: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="중1">중1</option>
+                    <option value="중2">중2</option>
+                    <option value="중3">중3</option>
+                    <option value="고1">고1</option>
+                    <option value="고2">고2</option>
+                    <option value="고3">고3</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">학교</label>
+                <input
+                  type="text"
+                  value={editingStudent.school || ''}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, school: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학생 전화번호</label>
+                  <input
+                    type="text"
+                    value={editingStudent.phone || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학부모 전화번호</label>
+                  <input
+                    type="text"
+                    value={editingStudent.parentPhone || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, parentPhone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">생년월일 (MMDD)</label>
+                <input
+                  type="text"
+                  value={editingStudent.birthDate || ''}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, birthDate: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              
+              <div className="pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">※ 아이디/비밀번호는 수정할 수 없습니다</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="px-3 py-2 bg-gray-100 rounded-lg">
+                    <p className="text-xs text-gray-500">아이디</p>
+                    <p className="text-sm font-medium text-gray-700">{editingStudent.id}</p>
+                  </div>
+                  <div className="px-3 py-2 bg-gray-100 rounded-lg">
+                    <p className="text-xs text-gray-500">비밀번호</p>
+                    <p className="text-sm font-medium text-gray-700">{editingStudent.password || '미등록'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleUpdateStudent}
+                  className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2"
+                >
+                  <Save size={16} />
+                  저장
+                </button>
+                <button
+                  onClick={() => setEditingStudent(null)}
+                  className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition flex items-center justify-center gap-2"
+                >
+                  <X size={16} />
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 학교 성적 입력 모달 */}
       {schoolGradeStudent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
