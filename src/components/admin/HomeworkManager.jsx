@@ -57,7 +57,8 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const [newAssignment, setNewAssignment] = useState({
     title: '',
     description: '',
-    dueDate: ''
+    dueDate: '',
+    taskCode: '' // ★ 과제 코드 추가
   });
   
   // ★ 전체 제출 현황 뷰
@@ -66,11 +67,10 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const [overviewMonth, setOverviewMonth] = useState(new Date().getMonth() + 1);
   const [overviewWeek, setOverviewWeek] = useState(1);
   
-  // 과제 코드 목록
+  // 과제 코드 목록 (복합형 삭제)
   const TASK_CODES = {
     numbers: ['1', '2', '3', '4', '5'],
-    letters: ['a', 'b', 'c', 'd', 'e'],
-    combined: ['1-1', '1-2', '2-1', '2-2', '3-1', '3-2']
+    letters: ['a', 'b', 'c', 'd', 'e']
   };
 
   // props로 받은 학생 목록이 변경되면 업데이트
@@ -265,12 +265,13 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
         ...newAssignment,
         month: month,
         week: week,
+        taskCode: newAssignment.taskCode || '', // ★ 과제 코드 저장
         createdAt: serverTimestamp(),
         status: 'active'
       });
 
       alert('과제가 생성되었습니다!');
-      setNewAssignment({ title: '', description: '', dueDate: '' });
+      setNewAssignment({ title: '', description: '', dueDate: '', taskCode: '' });
       setShowCreateForm(false);
       loadAssignments();
     } catch (error) {
@@ -471,7 +472,6 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                   <th className="border px-3 py-2 text-left sticky left-0 bg-gray-100">학생</th>
                   <th className="border px-2 py-2 text-center bg-blue-50" colSpan={5}>숫자형 (1~5)</th>
                   <th className="border px-2 py-2 text-center bg-green-50" colSpan={5}>알파벳형 (a~e)</th>
-                  <th className="border px-2 py-2 text-center bg-purple-50" colSpan={6}>복합형 (1-1~3-2)</th>
                 </tr>
                 <tr className="bg-gray-50">
                   <th className="border px-3 py-2 text-left sticky left-0 bg-gray-50">이름</th>
@@ -480,9 +480,6 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                   ))}
                   {TASK_CODES.letters.map(code => (
                     <th key={code} className="border px-2 py-1 text-center text-xs bg-green-50">{code}</th>
-                  ))}
-                  {TASK_CODES.combined.map(code => (
-                    <th key={code} className="border px-2 py-1 text-center text-xs bg-purple-50">{code}</th>
                   ))}
                 </tr>
               </thead>
@@ -521,20 +518,6 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                         </button>
                       </td>
                     ))}
-                    {TASK_CODES.combined.map(code => (
-                      <td key={code} className="border px-1 py-1 text-center">
-                        <button
-                          onClick={() => toggleTaskCodeInOverview(student.id, code)}
-                          className={`w-6 h-6 rounded text-xs font-bold transition ${
-                            hasTaskCodeInOverview(student.id, code)
-                              ? 'bg-purple-500 text-white'
-                              : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
-                          }`}
-                        >
-                          {hasTaskCodeInOverview(student.id, code) ? '✓' : ''}
-                        </button>
-                      </td>
-                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -542,8 +525,8 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
           </div>
           
           <div className="mt-4 text-sm text-gray-500">
-            <p>💡 각 칸을 클릭하면 제출 상태가 토글됩니다.</p>
-            <p>• 숫자형(1~5): 파란색 | 알파벳형(a~e): 초록색 | 복합형(1-1~3-2): 보라색</p>
+            <p>💡 각 칸을 클릭하면 제출 상태가 토글됩니다. 학생이 과제 제출 시 자동 체크됩니다.</p>
+            <p>• 숫자형(1~5): 파란색 | 알파벳형(a~e): 초록색</p>
           </div>
         </div>
       )}
@@ -638,6 +621,43 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
               />
             </div>
 
+            {/* ★ 과제 코드 선택 */}
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                과제 코드 (자동 체크용)
+              </label>
+              <select
+                value={newAssignment.taskCode}
+                onChange={(e) => setNewAssignment({ ...newAssignment, taskCode: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '16px',
+                  borderRadius: '5px',
+                  border: '1px solid #ddd'
+                }}
+              >
+                <option value="">선택 안함 (수동 관리)</option>
+                <optgroup label="숫자형">
+                  <option value="1">1번 과제</option>
+                  <option value="2">2번 과제</option>
+                  <option value="3">3번 과제</option>
+                  <option value="4">4번 과제</option>
+                  <option value="5">5번 과제</option>
+                </optgroup>
+                <optgroup label="알파벳형">
+                  <option value="a">a번 과제</option>
+                  <option value="b">b번 과제</option>
+                  <option value="c">c번 과제</option>
+                  <option value="d">d번 과제</option>
+                  <option value="e">e번 과제</option>
+                </optgroup>
+              </select>
+              <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
+                💡 코드 선택 시, 학생이 이 과제를 제출하면 대시보드에 자동 체크됩니다.
+              </p>
+            </div>
+
             <button
               type="submit"
               style={{
@@ -684,6 +704,18 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                   <h4 style={{ margin: 0 }}>{assignment.title}</h4>
+                  {assignment.taskCode && (
+                    <span style={{
+                      padding: '4px 12px',
+                      backgroundColor: TASK_CODES.numbers.includes(assignment.taskCode) ? '#dbeafe' : '#dcfce7',
+                      color: TASK_CODES.numbers.includes(assignment.taskCode) ? '#1d4ed8' : '#15803d',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      borderRadius: '12px'
+                    }}>
+                      코드: {assignment.taskCode}
+                    </span>
+                  )}
                   {assignment.month && assignment.week && (
                     <span style={{
                       padding: '4px 12px',
