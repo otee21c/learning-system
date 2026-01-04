@@ -45,6 +45,28 @@ const sendSMS = async (phoneNumber, message) => {
     return false;
   }
 };
+
+// ★ 지각 여부 체크 함수 (마감: 당일 23:59)
+const isLateSubmission = (dueDate, submittedAt) => {
+  if (!dueDate || !submittedAt) return false;
+  
+  // 마감일 23:59:59 설정
+  const deadline = new Date(dueDate);
+  deadline.setHours(23, 59, 59, 999);
+  
+  // 제출 시간
+  let submitTime;
+  if (submittedAt.seconds) {
+    submitTime = new Date(submittedAt.seconds * 1000);
+  } else if (submittedAt instanceof Date) {
+    submitTime = submittedAt;
+  } else {
+    submitTime = new Date(submittedAt);
+  }
+  
+  return submitTime > deadline;
+};
+
 // 과제 관리 컴포넌트
 
 const HomeworkManager = ({ students: propStudents = [], branch }) => {
@@ -978,10 +1000,39 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                       {assignment.month}월 {assignment.week}주차
                     </span>
                   )}
+                  {/* ★ 마감 여부 표시 */}
+                  {(() => {
+                    const deadline = new Date(assignment.dueDate);
+                    deadline.setHours(23, 59, 59, 999);
+                    const isPastDue = new Date() > deadline;
+                    return isPastDue ? (
+                      <span style={{
+                        padding: '4px 12px',
+                        backgroundColor: '#fee2e2',
+                        color: '#dc2626',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        borderRadius: '12px'
+                      }}>
+                        마감됨
+                      </span>
+                    ) : (
+                      <span style={{
+                        padding: '4px 12px',
+                        backgroundColor: '#dcfce7',
+                        color: '#16a34a',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        borderRadius: '12px'
+                      }}>
+                        진행중
+                      </span>
+                    );
+                  })()}
                 </div>
                 <p style={{ color: '#666', margin: '5px 0' }}>{assignment.description}</p>
                 <p style={{ color: '#999', fontSize: '14px', margin: '10px 0 0 0' }}>
-                  📅 마감일: {assignment.dueDate}
+                  📅 마감: {assignment.dueDate} 23:59
                   <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1061,11 +1112,19 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                         const submission = submissions.find(sub => sub.studentName === student.name || sub.studentId === student.id);
                         const manualStatus = submission?.manualStatus || '';
                         
-                        // 상태 결정: 수동 상태 > 제출 여부
+                        // ★ 지각 여부 체크
+                        const isLate = submission && selectedAssignment?.dueDate && 
+                          isLateSubmission(selectedAssignment.dueDate, submission.submittedAt);
+                        
+                        // 상태 결정: 수동 상태 > 제출 여부 (지각 포함)
                         const getDisplayStatus = () => {
                           if (manualStatus === '개별확인예정') return { text: '📋 개별확인 예정', color: '#f59e0b', bg: '#fef3c7' };
                           if (manualStatus === '개별확인완료') return { text: '✔️ 개별확인 완료', color: '#10b981', bg: '#d1fae5' };
                           if (submission && (submission.submitted || submission.imageUrl || submission.files)) {
+                            // ★ 지각 제출 표시
+                            if (isLate) {
+                              return { text: '⚠️ 지각 제출', color: '#ea580c', bg: '#ffedd5' };
+                            }
                             return { text: '✅ 제출', color: '#10b981', bg: '#d1fae5' };
                           }
                           return { text: '❌ 미제출', color: '#ef4444', bg: '#fee2e2' };
