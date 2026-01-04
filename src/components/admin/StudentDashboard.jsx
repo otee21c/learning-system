@@ -116,7 +116,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     }
 
     const statusText = status === '지각' ? '아직 등원하지 않아서' : '결석하여';
-    const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
+    const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.\n(학원 연락은 010-6600-5979로 편하게 해주세요.)`;
 
     setSendingSMS(true);
     let sentTo = [];
@@ -168,7 +168,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     for (const student of studentsToSend) {
       const status = getAttendanceStatus(student.id);
       const statusText = status === '지각' ? '아직 등원하지 않아서' : status === '결석' ? '결석하여' : '출결 관련으로';
-      const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.`;
+      const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.\n(학원 연락은 010-6600-5979로 편하게 해주세요.)`;
 
       // 학부모에게 발송
       if (student.parentPhone) {
@@ -320,14 +320,74 @@ const StudentDashboard = ({ students = [], branch }) => {
       h.week === selectedWeek
     );
     
+    // 과제 코드 수집
+    const taskCodes = submissions
+      .filter(s => s.taskCode)
+      .map(s => s.taskCode)
+      .sort();
+    
     const manualComplete = submissions.filter(s => s.manualStatus === '개별확인완료').length;
     const manualPending = submissions.filter(s => s.manualStatus === '개별확인예정').length;
     const submitted = submissions.filter(s => s.submitted || s.imageUrl || s.files).length;
     const totalComplete = submitted + manualComplete;
     
-    if (manualPending > 0) return { text: `확인예정 ${manualPending}`, type: 'pending' };
-    if (totalComplete > 0) return { text: `${totalComplete}개 완료`, type: 'complete' };
-    return { text: '미제출', type: 'none' };
+    // 과제 코드가 있으면 코드로 표시
+    if (taskCodes.length > 0) {
+      return { text: taskCodes.join(', '), type: 'complete', codes: taskCodes };
+    }
+    if (manualPending > 0) return { text: `확인예정 ${manualPending}`, type: 'pending', codes: [] };
+    if (totalComplete > 0) return { text: `${totalComplete}개 완료`, type: 'complete', codes: [] };
+    return { text: '미제출', type: 'none', codes: [] };
+  };
+
+  // 과제 코드 저장
+  const handleTaskCodeChange = async (studentId, taskCode) => {
+    if (!taskCode) return;
+    
+    try {
+      // 기존 해당 월/주차 데이터 확인
+      const existing = homeworkData.find(h => 
+        h.studentId === studentId && 
+        h.month === selectedMonth && 
+        h.week === selectedWeek &&
+        h.taskCode === taskCode
+      );
+      
+      if (existing) {
+        // 이미 있으면 삭제 (토글)
+        await deleteDoc(doc(db, 'homeworkSubmissions', existing.docId));
+        setHomeworkData(prev => prev.filter(h => h.docId !== existing.docId));
+      } else {
+        // 없으면 추가
+        const student = students.find(s => s.id === studentId);
+        const newSubmission = {
+          studentId,
+          studentName: student?.name || '',
+          month: selectedMonth,
+          week: selectedWeek,
+          taskCode,
+          submitted: true,
+          submittedAt: serverTimestamp(),
+          branch: branch || ''
+        };
+        
+        const docRef = await addDoc(collection(db, 'homeworkSubmissions'), newSubmission);
+        setHomeworkData(prev => [...prev, { docId: docRef.id, ...newSubmission }]);
+      }
+    } catch (error) {
+      console.error('과제 코드 저장 실패:', error);
+      alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 특정 과제 코드 체크 여부
+  const hasTaskCode = (studentId, taskCode) => {
+    return homeworkData.some(h => 
+      h.studentId === studentId && 
+      h.month === selectedMonth && 
+      h.week === selectedWeek &&
+      h.taskCode === taskCode
+    );
   };
 
   // 학생별 성적 가져오기 (해당 월/주차)
@@ -883,21 +943,41 @@ const StudentDashboard = ({ students = [], branch }) => {
                         </td>
 
                         <td className="px-4 py-3 text-center">
-                          <select
-                            value={homeworkManualStatus}
-                            onChange={(e) => handleHomeworkStatusChange(student.id, e.target.value)}
-                            className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer border focus:ring-2 focus:ring-indigo-500 ${
-                              homeworkStatus.type === 'complete' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              homeworkStatus.type === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                              'bg-red-50 text-red-700 border-red-200'
-                            }`}
-                          >
-                            <option value="">
-                              {homeworkStatus.text}
-                            </option>
-                            <option value="개별확인예정">📋 개별확인 예정</option>
-                            <option value="개별확인완료">✔️ 개별확인 완료</option>
-                          </select>
+                          <div className="flex flex-col gap-1">
+                            {/* 과제 코드 체크박스 그리드 */}
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {['1', '2', '3', '4', '5'].map(code => (
+                                <button
+                                  key={code}
+                                  onClick={() => handleTaskCodeChange(student.id, code)}
+                                  className={`w-6 h-6 rounded text-xs font-bold transition ${
+                                    hasTaskCode(student.id, code)
+                                      ? 'bg-blue-500 text-white'
+                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                  }`}
+                                  title={`과제 ${code}`}
+                                >
+                                  {code}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {['a', 'b', 'c', 'd', 'e'].map(code => (
+                                <button
+                                  key={code}
+                                  onClick={() => handleTaskCodeChange(student.id, code)}
+                                  className={`w-6 h-6 rounded text-xs font-bold transition ${
+                                    hasTaskCode(student.id, code)
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                  }`}
+                                  title={`과제 ${code}`}
+                                >
+                                  {code}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </td>
 
                         {/* ★ 제출물 - 학생별 모든 과제 사진 보기 */}

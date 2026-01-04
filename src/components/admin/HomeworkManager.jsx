@@ -59,6 +59,19 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
     description: '',
     dueDate: ''
   });
+  
+  // ★ 전체 제출 현황 뷰
+  const [viewMode, setViewMode] = useState('assignments'); // 'assignments' | 'overview'
+  const [allSubmissions, setAllSubmissions] = useState([]);
+  const [overviewMonth, setOverviewMonth] = useState(new Date().getMonth() + 1);
+  const [overviewWeek, setOverviewWeek] = useState(1);
+  
+  // 과제 코드 목록
+  const TASK_CODES = {
+    numbers: ['1', '2', '3', '4', '5'],
+    letters: ['a', 'b', 'c', 'd', 'e'],
+    combined: ['1-1', '1-2', '2-1', '2-2', '3-1', '3-2']
+  };
 
   // props로 받은 학생 목록이 변경되면 업데이트
   useEffect(() => {
@@ -68,6 +81,7 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   // 과제 목록 불러오기
   useEffect(() => {
     loadAssignments();
+    loadAllSubmissions();
   }, []);
 
   const loadAssignments = async () => {
@@ -81,6 +95,66 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
       setAssignments(assignmentList);
     } catch (error) {
       console.error('과제 불러오기 실패:', error);
+    }
+  };
+
+  // ★ 전체 제출 현황 불러오기
+  const loadAllSubmissions = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, 'homeworkSubmissions'));
+      const submissionList = snapshot.docs.map(doc => ({
+        docId: doc.id,
+        ...doc.data()
+      }));
+      setAllSubmissions(submissionList);
+    } catch (error) {
+      console.error('전체 제출 현황 불러오기 실패:', error);
+    }
+  };
+
+  // ★ 학생별 과제 코드 체크 여부 (전체 현황용)
+  const hasTaskCodeInOverview = (studentId, taskCode) => {
+    return allSubmissions.some(s => 
+      s.studentId === studentId && 
+      s.month === overviewMonth && 
+      s.week === overviewWeek &&
+      s.taskCode === taskCode
+    );
+  };
+
+  // ★ 과제 코드 토글 (전체 현황에서)
+  const toggleTaskCodeInOverview = async (studentId, taskCode) => {
+    try {
+      const existing = allSubmissions.find(s => 
+        s.studentId === studentId && 
+        s.month === overviewMonth && 
+        s.week === overviewWeek &&
+        s.taskCode === taskCode
+      );
+      
+      if (existing) {
+        // 삭제
+        await deleteDoc(doc(db, 'homeworkSubmissions', existing.docId));
+        setAllSubmissions(prev => prev.filter(s => s.docId !== existing.docId));
+      } else {
+        // 추가
+        const student = students.find(s => s.id === studentId);
+        const newSubmission = {
+          studentId,
+          studentName: student?.name || '',
+          month: overviewMonth,
+          week: overviewWeek,
+          taskCode,
+          submitted: true,
+          submittedAt: serverTimestamp(),
+          branch: branch || ''
+        };
+        
+        const docRef = await addDoc(collection(db, 'homeworkSubmissions'), newSubmission);
+        setAllSubmissions(prev => [...prev, { docId: docRef.id, ...newSubmission }]);
+      }
+    } catch (error) {
+      console.error('과제 코드 토글 실패:', error);
     }
   };
   // 학생 제출 기록 불러오기
@@ -328,24 +402,175 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '30px'
+        marginBottom: '20px'
       }}>
         <h2>📚 과제 관리</h2>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          {showCreateForm ? '취소' : '+ 새 과제'}
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setViewMode('assignments')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: viewMode === 'assignments' ? '#4F46E5' : '#E5E7EB',
+              color: viewMode === 'assignments' ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            📋 과제 목록
+          </button>
+          <button
+            onClick={() => setViewMode('overview')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: viewMode === 'overview' ? '#4F46E5' : '#E5E7EB',
+              color: viewMode === 'overview' ? 'white' : '#374151',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}
+          >
+            📊 전체 현황표
+          </button>
+        </div>
       </div>
+
+      {/* ★ 전체 현황표 뷰 */}
+      {viewMode === 'overview' && (
+        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <div className="flex items-center gap-4 mb-4">
+            <h3 className="text-lg font-bold">학생별 과제 제출 현황</h3>
+            <select
+              value={overviewMonth}
+              onChange={(e) => setOverviewMonth(Number(e.target.value))}
+              className="px-3 py-2 border rounded-lg"
+            >
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                <option key={m} value={m}>{m}월</option>
+              ))}
+            </select>
+            <select
+              value={overviewWeek}
+              onChange={(e) => setOverviewWeek(Number(e.target.value))}
+              className="px-3 py-2 border rounded-lg"
+            >
+              {[1,2,3,4,5].map(w => (
+                <option key={w} value={w}>{w}주차</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border px-3 py-2 text-left sticky left-0 bg-gray-100">학생</th>
+                  <th className="border px-2 py-2 text-center bg-blue-50" colSpan={5}>숫자형 (1~5)</th>
+                  <th className="border px-2 py-2 text-center bg-green-50" colSpan={5}>알파벳형 (a~e)</th>
+                  <th className="border px-2 py-2 text-center bg-purple-50" colSpan={6}>복합형 (1-1~3-2)</th>
+                </tr>
+                <tr className="bg-gray-50">
+                  <th className="border px-3 py-2 text-left sticky left-0 bg-gray-50">이름</th>
+                  {TASK_CODES.numbers.map(code => (
+                    <th key={code} className="border px-2 py-1 text-center text-xs bg-blue-50">{code}</th>
+                  ))}
+                  {TASK_CODES.letters.map(code => (
+                    <th key={code} className="border px-2 py-1 text-center text-xs bg-green-50">{code}</th>
+                  ))}
+                  {TASK_CODES.combined.map(code => (
+                    <th key={code} className="border px-2 py-1 text-center text-xs bg-purple-50">{code}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {students.map((student, idx) => (
+                  <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="border px-3 py-2 font-medium sticky left-0 bg-inherit">
+                      {student.name}
+                      <span className="text-xs text-gray-500 ml-1">{student.grade}</span>
+                    </td>
+                    {TASK_CODES.numbers.map(code => (
+                      <td key={code} className="border px-1 py-1 text-center">
+                        <button
+                          onClick={() => toggleTaskCodeInOverview(student.id, code)}
+                          className={`w-6 h-6 rounded text-xs font-bold transition ${
+                            hasTaskCodeInOverview(student.id, code)
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                          }`}
+                        >
+                          {hasTaskCodeInOverview(student.id, code) ? '✓' : ''}
+                        </button>
+                      </td>
+                    ))}
+                    {TASK_CODES.letters.map(code => (
+                      <td key={code} className="border px-1 py-1 text-center">
+                        <button
+                          onClick={() => toggleTaskCodeInOverview(student.id, code)}
+                          className={`w-6 h-6 rounded text-xs font-bold transition ${
+                            hasTaskCodeInOverview(student.id, code)
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                          }`}
+                        >
+                          {hasTaskCodeInOverview(student.id, code) ? '✓' : ''}
+                        </button>
+                      </td>
+                    ))}
+                    {TASK_CODES.combined.map(code => (
+                      <td key={code} className="border px-1 py-1 text-center">
+                        <button
+                          onClick={() => toggleTaskCodeInOverview(student.id, code)}
+                          className={`w-6 h-6 rounded text-xs font-bold transition ${
+                            hasTaskCodeInOverview(student.id, code)
+                              ? 'bg-purple-500 text-white'
+                              : 'bg-gray-200 text-gray-400 hover:bg-gray-300'
+                          }`}
+                        >
+                          {hasTaskCodeInOverview(student.id, code) ? '✓' : ''}
+                        </button>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="mt-4 text-sm text-gray-500">
+            <p>💡 각 칸을 클릭하면 제출 상태가 토글됩니다.</p>
+            <p>• 숫자형(1~5): 파란색 | 알파벳형(a~e): 초록색 | 복합형(1-1~3-2): 보라색</p>
+          </div>
+        </div>
+      )}
+
+      {/* 기존 과제 목록 뷰 */}
+      {viewMode === 'assignments' && (
+        <>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: '10px'
+          }}>
+            <button
+              onClick={() => setShowCreateForm(!showCreateForm)}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer',
+                fontSize: '16px'
+              }}
+            >
+              {showCreateForm ? '취소' : '+ 새 과제'}
+            </button>
+          </div>
 
       {/* 과제 생성 폼 */}
       {showCreateForm && (
@@ -767,6 +992,8 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };
