@@ -175,6 +175,7 @@ const ConceptQuestion = ({ currentUser }) => {
         question: finalQuestion,
         questionImageUrl: questionImageUrl,
         answer: answerText,
+        branch: currentUser.branch || '', // ★ 지점 정보
         createdAt: serverTimestamp()
       });
       

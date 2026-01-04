@@ -58,7 +58,9 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
     title: '',
     description: '',
     dueDate: '',
-    taskCode: '' // ★ 과제 코드 추가
+    taskCode: '',
+    sendToStudent: true,   // ★ 학생에게 알림
+    sendToParent: true     // ★ 학부모에게 알림
   });
   
   // ★ 전체 제출 현황 뷰
@@ -66,6 +68,13 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const [allSubmissions, setAllSubmissions] = useState([]);
   const [overviewMonth, setOverviewMonth] = useState(new Date().getMonth() + 1);
   const [overviewWeek, setOverviewWeek] = useState(1);
+  
+  // ★ 미제출자 필터 및 발송 관련
+  const [showNotSubmittedOnly, setShowNotSubmittedOnly] = useState(false);
+  const [selectedTaskCode, setSelectedTaskCode] = useState(''); // 미제출 체크할 과제 코드
+  const [sendToStudentBulk, setSendToStudentBulk] = useState(true);
+  const [sendToParentBulk, setSendToParentBulk] = useState(true);
+  const [sendingBulk, setSendingBulk] = useState(false);
   
   // 과제 코드 목록 (복합형 삭제)
   const TASK_CODES = {
@@ -82,16 +91,22 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   useEffect(() => {
     loadAssignments();
     loadAllSubmissions();
-  }, []);
+  }, [branch]);
 
   const loadAssignments = async () => {
     try {
       const q = query(collection(db, 'assignments'), orderBy('createdAt', 'desc'));
       const snapshot = await getDocs(q);
-      const assignmentList = snapshot.docs.map(doc => ({
+      let assignmentList = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      
+      // ★ 지점별 필터링 (branch가 없거나 현재 지점과 일치하는 것만)
+      if (branch) {
+        assignmentList = assignmentList.filter(a => !a.branch || a.branch === branch);
+      }
+      
       setAssignments(assignmentList);
     } catch (error) {
       console.error('과제 불러오기 실패:', error);
@@ -102,10 +117,16 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const loadAllSubmissions = async () => {
     try {
       const snapshot = await getDocs(collection(db, 'homeworkSubmissions'));
-      const submissionList = snapshot.docs.map(doc => ({
+      let submissionList = snapshot.docs.map(doc => ({
         docId: doc.id,
         ...doc.data()
       }));
+      
+      // ★ 지점별 필터링
+      if (branch) {
+        submissionList = submissionList.filter(s => !s.branch || s.branch === branch);
+      }
+      
       setAllSubmissions(submissionList);
     } catch (error) {
       console.error('전체 제출 현황 불러오기 실패:', error);
@@ -157,6 +178,107 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
       console.error('과제 코드 토글 실패:', error);
     }
   };
+
+  // ★ 미제출자 목록 가져오기
+  const getNotSubmittedStudents = (taskCode) => {
+    if (!taskCode) return [];
+    return students.filter(student => !hasTaskCodeInOverview(student.id, taskCode));
+  };
+
+  // ★ 미제출자 일괄 문자 발송
+  const sendBulkNotSubmittedSMS = async () => {
+    if (!selectedTaskCode) {
+      alert('과제 코드를 선택해주세요.');
+      return;
+    }
+
+    const notSubmitted = getNotSubmittedStudents(selectedTaskCode);
+    if (notSubmitted.length === 0) {
+      alert('미제출자가 없습니다.');
+      return;
+    }
+
+    if (!sendToStudentBulk && !sendToParentBulk) {
+      alert('발송 대상을 선택해주세요.');
+      return;
+    }
+
+    // 해당 과제 코드의 과제명 찾기
+    const assignment = assignments.find(a => a.taskCode === selectedTaskCode);
+    const taskName = assignment?.title || `${selectedTaskCode}번 과제`;
+
+    const targetCount = notSubmitted.length;
+    const targetType = [];
+    if (sendToStudentBulk) targetType.push('학생');
+    if (sendToParentBulk) targetType.push('학부모');
+
+    if (!window.confirm(
+      `[${overviewMonth}월 ${overviewWeek}주차 - ${taskName}]\n` +
+      `미제출자 ${targetCount}명에게 ${targetType.join(', ')}에게 문자를 발송하시겠습니까?`
+    )) {
+      return;
+    }
+
+    setSendingBulk(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const student of notSubmitted) {
+      const message = `안녕하세요. 오늘의 국어입니다.\n${student.name} 학생의 '${taskName}' 과제가 아직 제출되지 않았습니다.\n확인 부탁드립니다.\n(학원 연락은 010-6600-5979로 편하게 해주세요.)`;
+
+      // 학생에게 발송
+      if (sendToStudentBulk && student.phone) {
+        try {
+          const response = await fetch('https://apis.aligo.in/send/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              key: import.meta.env.VITE_ALIGO_API_KEY,
+              user_id: import.meta.env.VITE_ALIGO_USER_ID,
+              sender: import.meta.env.VITE_ALIGO_SENDER,
+              receiver: student.phone,
+              msg: message,
+              testmode_yn: 'N'
+            })
+          });
+          const data = await response.json();
+          if (data.result_code === '1') successCount++;
+          else failCount++;
+        } catch (error) {
+          console.error('학생 발송 실패:', student.name, error);
+          failCount++;
+        }
+      }
+
+      // 학부모에게 발송
+      if (sendToParentBulk && student.parentPhone) {
+        try {
+          const response = await fetch('https://apis.aligo.in/send/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              key: import.meta.env.VITE_ALIGO_API_KEY,
+              user_id: import.meta.env.VITE_ALIGO_USER_ID,
+              sender: import.meta.env.VITE_ALIGO_SENDER,
+              receiver: student.parentPhone,
+              msg: message,
+              testmode_yn: 'N'
+            })
+          });
+          const data = await response.json();
+          if (data.result_code === '1') successCount++;
+          else failCount++;
+        } catch (error) {
+          console.error('학부모 발송 실패:', student.name, error);
+          failCount++;
+        }
+      }
+    }
+
+    setSendingBulk(false);
+    alert(`발송 완료!\n성공: ${successCount}건\n실패: ${failCount}건`);
+  };
+
   // 학생 제출 기록 불러오기
   const loadSubmissions = async (assignmentId) => {
     try {
@@ -265,13 +387,23 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
         ...newAssignment,
         month: month,
         week: week,
-        taskCode: newAssignment.taskCode || '', // ★ 과제 코드 저장
+        taskCode: newAssignment.taskCode || '',
+        sendToStudent: newAssignment.sendToStudent,   // ★ 발송 대상
+        sendToParent: newAssignment.sendToParent,     // ★ 발송 대상
+        branch: branch || '',                          // ★ 지점 정보
         createdAt: serverTimestamp(),
         status: 'active'
       });
 
       alert('과제가 생성되었습니다!');
-      setNewAssignment({ title: '', description: '', dueDate: '', taskCode: '' });
+      setNewAssignment({ 
+        title: '', 
+        description: '', 
+        dueDate: '', 
+        taskCode: '',
+        sendToStudent: true,
+        sendToParent: true
+      });
       setShowCreateForm(false);
       loadAssignments();
     } catch (error) {
@@ -443,7 +575,7 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
       {/* ★ 전체 현황표 뷰 */}
       {viewMode === 'overview' && (
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-4 mb-4 flex-wrap">
             <h3 className="text-lg font-bold">학생별 과제 제출 현황</h3>
             <select
               value={overviewMonth}
@@ -463,6 +595,94 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
                 <option key={w} value={w}>{w}주차</option>
               ))}
             </select>
+            {branch && (
+              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-sm font-medium">
+                📍 {branch}
+              </span>
+            )}
+          </div>
+
+          {/* ★ 미제출자 알림 발송 섹션 */}
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+            <h4 className="font-bold text-orange-800 mb-3">📱 미제출자 알림 발송</h4>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">과제 코드:</label>
+                <select
+                  value={selectedTaskCode}
+                  onChange={(e) => setSelectedTaskCode(e.target.value)}
+                  className="px-3 py-2 border rounded-lg text-sm"
+                >
+                  <option value="">선택</option>
+                  <optgroup label="숫자형">
+                    {TASK_CODES.numbers.map(code => (
+                      <option key={code} value={code}>{code}번</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="알파벳형">
+                    {TASK_CODES.letters.map(code => (
+                      <option key={code} value={code}>{code}번</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendToStudentBulk}
+                    onChange={(e) => setSendToStudentBulk(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">학생</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sendToParentBulk}
+                    onChange={(e) => setSendToParentBulk(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">학부모</span>
+                </label>
+              </div>
+
+              <button
+                onClick={sendBulkNotSubmittedSMS}
+                disabled={sendingBulk || !selectedTaskCode}
+                className={`px-4 py-2 rounded-lg text-sm font-bold ${
+                  sendingBulk || !selectedTaskCode
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                }`}
+              >
+                {sendingBulk ? '발송 중...' : '📤 미제출자 알림 발송'}
+              </button>
+
+              {selectedTaskCode && (
+                <span className="text-sm text-orange-700 font-medium">
+                  미제출: {getNotSubmittedStudents(selectedTaskCode).length}명
+                </span>
+              )}
+            </div>
+
+            {/* 미제출자 미리보기 */}
+            {selectedTaskCode && getNotSubmittedStudents(selectedTaskCode).length > 0 && (
+              <div className="mt-3 p-3 bg-white rounded border">
+                <p className="text-xs text-gray-600 mb-2">미제출자 목록:</p>
+                <div className="flex flex-wrap gap-2">
+                  {getNotSubmittedStudents(selectedTaskCode).map(student => (
+                    <span 
+                      key={student.id}
+                      className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs"
+                    >
+                      {student.name} ({student.grade})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           
           <div className="overflow-x-auto">
@@ -655,6 +875,36 @@ const HomeworkManager = ({ students: propStudents = [], branch }) => {
               </select>
               <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
                 💡 코드 선택 시, 학생이 이 과제를 제출하면 대시보드에 자동 체크됩니다.
+              </p>
+            </div>
+
+            {/* ★ 미제출 알림 발송 대상 설정 */}
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+                📱 미제출 자동 알림 발송 대상
+              </label>
+              <div style={{ display: 'flex', gap: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={newAssignment.sendToStudent}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, sendToStudent: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  <span>학생에게 발송</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={newAssignment.sendToParent}
+                    onChange={(e) => setNewAssignment({ ...newAssignment, sendToParent: e.target.checked })}
+                    style={{ width: '18px', height: '18px' }}
+                  />
+                  <span>학부모님께 발송</span>
+                </label>
+              </div>
+              <p style={{ fontSize: '12px', color: '#888', marginTop: '5px' }}>
+                ⏰ 마감일 다음날 오후 1시에 미제출자에게 자동 발송됩니다.
               </p>
             </div>
 
