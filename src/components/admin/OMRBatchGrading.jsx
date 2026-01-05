@@ -774,29 +774,46 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       return;
     }
     
+    if (!personalReportRef.current) return;
+    
     setIsGeneratingPersonalPdf(true);
     try {
-      // html2canvas 동적 로드
-      const html2canvasModule = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.js');
-      const html2canvas = html2canvasModule.default;
-      
-      // jsPDF 동적 로드
-      const jsPDFModule = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
-      const { jsPDF } = jsPDFModule;
+      // 기존 성적표와 동일한 방식으로 import
+      const html2canvas = (await import('html2canvas')).default;
+      const jsPDF = (await import('jspdf')).default;
       
       const element = personalReportRef.current;
       const canvas = await html2canvas(element, { 
         scale: 2, 
         useCORS: true,
-        logging: false
+        logging: false,
+        backgroundColor: '#ffffff'
       });
-      const imgData = canvas.toDataURL('image/png');
       
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      // 여백 설정 (mm)
+      const margin = 10;
+      const contentWidth = pdfWidth - (margin * 2);
+      const contentHeight = pdfHeight - (margin * 2);
+      
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      
+      // 비율 계산 (여백 고려)
+      const ratio = Math.min(contentWidth / imgWidth, contentHeight / imgHeight);
+      const scaledWidth = imgWidth * ratio;
+      const scaledHeight = imgHeight * ratio;
+      
+      // 중앙 정렬
+      const imgX = (pdfWidth - scaledWidth) / 2;
+      const imgY = margin;
+      
+      pdf.addImage(imgData, 'JPEG', imgX, imgY, scaledWidth, scaledHeight);
       pdf.save(`퍼스널성취도_${personalData.studentName}_${personalData.reportDate || new Date().toLocaleDateString('ko-KR')}.pdf`);
     } catch (error) {
       console.error('PDF 생성 실패:', error);
