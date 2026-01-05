@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, Trash2, Save, X, 
   ChevronDown, ChevronUp, Camera, AlertCircle, Loader2,
-  CheckCircle, File, Printer, Download, Edit3
+  CheckCircle, File, Printer, Download, Edit3, List
 } from 'lucide-react';
-import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
@@ -79,6 +79,12 @@ export default function OMRBatchGrading({ exams, students, branch }) {
   });
   const [isGeneratingPersonalPdf, setIsGeneratingPersonalPdf] = useState(false);
   const personalReportRef = useRef(null);
+  
+  // ★ 퍼스널 성취도 저장/불러오기 관련
+  const [savedPersonalReports, setSavedPersonalReports] = useState([]);
+  const [selectedPersonalReportId, setSelectedPersonalReportId] = useState('');
+  const [isSavingPersonal, setIsSavingPersonal] = useState(false);
+  const [isLoadingPersonalReports, setIsLoadingPersonalReports] = useState(false);
 
   // 성적표 ref
   const reportRef = useRef(null);
@@ -646,6 +652,166 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     );
   };
 
+  // ★ 퍼스널 성취도 목록 불러오기
+  const loadPersonalReports = async () => {
+    setIsLoadingPersonalReports(true);
+    try {
+      const snapshot = await getDocs(collection(db, 'personalReports'));
+      let reports = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // 지점 필터링
+      if (branch) {
+        reports = reports.filter(r => !r.branch || r.branch === branch);
+      }
+      
+      // 날짜순 정렬 (최신순)
+      reports.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
+      setSavedPersonalReports(reports);
+    } catch (error) {
+      console.error('퍼스널 성취도 목록 로드 실패:', error);
+    }
+    setIsLoadingPersonalReports(false);
+  };
+
+  // ★ 퍼스널 성취도 저장
+  const savePersonalReport = async () => {
+    if (!personalData.studentName) {
+      alert('학생 이름을 입력해주세요.');
+      return;
+    }
+    
+    setIsSavingPersonal(true);
+    try {
+      if (selectedPersonalReportId) {
+        // 기존 문서 수정
+        await updateDoc(doc(db, 'personalReports', selectedPersonalReportId), {
+          ...personalData,
+          branch: branch || '',
+          updatedAt: serverTimestamp()
+        });
+        alert('수정되었습니다!');
+      } else {
+        // 새 문서 추가
+        await addDoc(collection(db, 'personalReports'), {
+          ...personalData,
+          branch: branch || '',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+        alert('저장되었습니다!');
+      }
+      loadPersonalReports();
+    } catch (error) {
+      console.error('저장 실패:', error);
+      alert('저장에 실패했습니다.');
+    }
+    setIsSavingPersonal(false);
+  };
+
+  // ★ 퍼스널 성취도 불러오기
+  const loadPersonalReport = (report) => {
+    setPersonalData({
+      studentName: report.studentName || '',
+      reportDate: report.reportDate || '',
+      totalScore: report.totalScore || '',
+      balanceScores: report.balanceScores || { 과제: 0, 훈련: 0, 과정: 0, 진단: 0 },
+      detailContents: report.detailContents || { 과제점검: '', 훈련적용: '', 학습과정: '', 학습진단: '' },
+      selfCheck1Title: report.selfCheck1Title || '',
+      selfCheck1Content: report.selfCheck1Content || '',
+      selfCheck2Title: report.selfCheck2Title || '',
+      selfCheck2Content: report.selfCheck2Content || '',
+      diagnosisMemo: report.diagnosisMemo || ''
+    });
+    setSelectedPersonalReportId(report.id);
+  };
+
+  // ★ 퍼스널 성취도 삭제
+  const deletePersonalReport = async (reportId) => {
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteDoc(doc(db, 'personalReports', reportId));
+      alert('삭제되었습니다.');
+      loadPersonalReports();
+      if (selectedPersonalReportId === reportId) {
+        resetPersonalForm();
+      }
+    } catch (error) {
+      console.error('삭제 실패:', error);
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
+  // ★ 폼 초기화
+  const resetPersonalForm = () => {
+    setPersonalData({
+      studentName: '',
+      reportDate: '',
+      totalScore: '',
+      balanceScores: { 과제: 0, 훈련: 0, 과정: 0, 진단: 0 },
+      detailContents: { 과제점검: '', 훈련적용: '', 학습과정: '', 학습진단: '' },
+      selfCheck1Title: '',
+      selfCheck1Content: '',
+      selfCheck2Title: '',
+      selfCheck2Content: '',
+      diagnosisMemo: ''
+    });
+    setSelectedPersonalReportId('');
+  };
+
+  // ★ 퍼스널 성취도 PDF 다운로드 (수정됨)
+  const downloadPersonalPdf = async () => {
+    if (!personalData.studentName) {
+      alert('학생 이름을 입력해주세요.');
+      return;
+    }
+    
+    setIsGeneratingPersonalPdf(true);
+    try {
+      // html2canvas 동적 로드
+      const html2canvasModule = await import('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.js');
+      const html2canvas = html2canvasModule.default;
+      
+      // jsPDF 동적 로드
+      const jsPDFModule = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js');
+      const { jsPDF } = jsPDFModule;
+      
+      const element = personalReportRef.current;
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        logging: false
+      });
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`퍼스널성취도_${personalData.studentName}_${personalData.reportDate || new Date().toLocaleDateString('ko-KR')}.pdf`);
+    } catch (error) {
+      console.error('PDF 생성 실패:', error);
+      alert('PDF 생성에 실패했습니다. 다시 시도해주세요.');
+    }
+    setIsGeneratingPersonalPdf(false);
+  };
+
+  // 퍼스널 탭 진입 시 목록 로드
+  useEffect(() => {
+    if (activeTab === 'personal') {
+      loadPersonalReports();
+    }
+  }, [activeTab, branch]);
+
   return (
     <div className="bg-white rounded-2xl shadow-xl p-6">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -990,9 +1156,72 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       {/* ★ 퍼스널 성취도 탭 */}
       {activeTab === 'personal' && (
         <div className="space-y-6">
+          {/* 저장된 목록 */}
+          <div className="bg-blue-50 rounded-xl p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-blue-800 flex items-center gap-2">
+                <List size={18} />
+                저장된 퍼스널 성취도
+              </h3>
+              <button
+                onClick={resetPersonalForm}
+                className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+              >
+                + 새로 작성
+              </button>
+            </div>
+            
+            {isLoadingPersonalReports ? (
+              <div className="text-center py-4">
+                <Loader2 className="animate-spin mx-auto text-blue-600" />
+              </div>
+            ) : savedPersonalReports.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">저장된 기록이 없습니다.</p>
+            ) : (
+              <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                {savedPersonalReports.map(report => (
+                  <div
+                    key={report.id}
+                    className={`p-2 rounded-lg cursor-pointer transition text-sm ${
+                      selectedPersonalReportId === report.id 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-white hover:bg-blue-100'
+                    }`}
+                  >
+                    <div 
+                      onClick={() => loadPersonalReport(report)}
+                      className="font-medium"
+                    >
+                      {report.studentName}
+                    </div>
+                    <div className={`text-xs ${selectedPersonalReportId === report.id ? 'text-blue-200' : 'text-gray-500'}`}>
+                      {report.reportDate || '날짜 없음'}
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deletePersonalReport(report.id);
+                      }}
+                      className={`text-xs mt-1 ${selectedPersonalReportId === report.id ? 'text-red-200 hover:text-red-100' : 'text-red-500 hover:text-red-700'}`}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* 입력 폼 */}
           <div className="bg-gray-50 rounded-xl p-6 space-y-6">
-            <h3 className="font-bold text-lg text-gray-800">📋 퍼스널 성취도 입력</h3>
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-lg text-gray-800">
+                📋 퍼스널 성취도 {selectedPersonalReportId ? '수정' : '입력'}
+              </h3>
+              {selectedPersonalReportId && (
+                <span className="text-sm text-blue-600">수정 중...</span>
+              )}
+            </div>
             
             {/* 기본 정보 */}
             <div className="grid grid-cols-3 gap-4">
@@ -1120,37 +1349,20 @@ export default function OMRBatchGrading({ exams, students, branch }) {
               />
             </div>
 
-            {/* PDF 다운로드 버튼 */}
-            <div className="flex justify-end">
+            {/* 저장 및 PDF 다운로드 버튼 */}
+            <div className="flex justify-end gap-3">
               <button
-                onClick={async () => {
-                  if (!personalData.studentName) {
-                    alert('학생 이름을 입력해주세요.');
-                    return;
-                  }
-                  setIsGeneratingPersonalPdf(true);
-                  try {
-                    const html2canvas = (await import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.esm.js')).default;
-                    const jsPDF = (await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')).jsPDF;
-                    
-                    const element = personalReportRef.current;
-                    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
-                    const imgData = canvas.toDataURL('image/png');
-                    
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    const pdfWidth = pdf.internal.pageSize.getWidth();
-                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-                    
-                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                    pdf.save(`퍼스널성취도_${personalData.studentName}_${personalData.reportDate || new Date().toLocaleDateString('ko-KR')}.pdf`);
-                  } catch (error) {
-                    console.error('PDF 생성 실패:', error);
-                    alert('PDF 생성에 실패했습니다.');
-                  }
-                  setIsGeneratingPersonalPdf(false);
-                }}
+                onClick={savePersonalReport}
+                disabled={isSavingPersonal}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50 hover:bg-blue-700"
+              >
+                {isSavingPersonal ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                {selectedPersonalReportId ? '수정 저장' : '저장'}
+              </button>
+              <button
+                onClick={downloadPersonalPdf}
                 disabled={isGeneratingPersonalPdf}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+                className="px-6 py-3 bg-green-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50 hover:bg-green-700"
               >
                 {isGeneratingPersonalPdf ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
                 PDF 다운로드
