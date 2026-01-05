@@ -50,6 +50,36 @@ export default function OMRBatchGrading({ exams, students, branch }) {
   const [changeComment, setChangeComment] = useState('');
   const [isEditingComments, setIsEditingComments] = useState(false);
 
+  // ★ 퍼스널 성취도용 state
+  const [personalData, setPersonalData] = useState({
+    studentName: '',
+    reportDate: '',
+    totalScore: '',
+    // 영역별 밸런스 (4가지)
+    balanceScores: {
+      과제: 0,
+      훈련: 0,
+      과정: 0,
+      진단: 0
+    },
+    // 상세 영역별 (4가지)
+    detailContents: {
+      과제점검: '',
+      훈련적용: '',
+      학습과정: '',
+      학습진단: ''
+    },
+    // 자기 점검 (2단 박스)
+    selfCheck1Title: '',
+    selfCheck1Content: '',
+    selfCheck2Title: '',
+    selfCheck2Content: '',
+    // 진단 메모
+    diagnosisMemo: ''
+  });
+  const [isGeneratingPersonalPdf, setIsGeneratingPersonalPdf] = useState(false);
+  const personalReportRef = useRef(null);
+
   // 성적표 ref
   const reportRef = useRef(null);
 
@@ -540,6 +570,82 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     );
   };
 
+  // ★ 퍼스널 성취도용 레이더 차트 (4개 항목)
+  const PersonalRadarChart = ({ data }) => {
+    const types = Object.keys(data);
+    const values = Object.values(data);
+    const n = types.length;
+    if (n === 0) return null;
+
+    const cx = 120, cy = 120, r = 80;
+    const angleStep = (2 * Math.PI) / n;
+
+    // 배경 다각형 (100%, 75%, 50%, 25%)
+    const createPolygon = (radius) => {
+      return types.map((_, i) => {
+        const angle = i * angleStep - Math.PI / 2;
+        const x = cx + radius * Math.cos(angle);
+        const y = cy + radius * Math.sin(angle);
+        return `${x},${y}`;
+      }).join(' ');
+    };
+
+    // 데이터 다각형
+    const dataPoints = types.map((_, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      const value = values[i] / 100;
+      const x = cx + r * value * Math.cos(angle);
+      const y = cy + r * value * Math.sin(angle);
+      return `${x},${y}`;
+    }).join(' ');
+
+    // 레이블 위치
+    const labels = types.map((type, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      const x = cx + (r + 30) * Math.cos(angle);
+      const y = cy + (r + 30) * Math.sin(angle);
+      return { x, y, text: type, value: values[i] };
+    });
+
+    return (
+      <svg viewBox="0 0 240 240" className="w-full h-full">
+        {/* 배경 그리드 */}
+        <polygon points={createPolygon(r)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+        <polygon points={createPolygon(r * 0.75)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+        <polygon points={createPolygon(r * 0.5)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+        <polygon points={createPolygon(r * 0.25)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+        
+        {/* 축 */}
+        {types.map((_, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          const x2 = cx + r * Math.cos(angle);
+          const y2 = cy + r * Math.sin(angle);
+          return <line key={i} x1={cx} y1={cy} x2={x2} y2={y2} stroke="#e5e7eb" strokeWidth="1" />;
+        })}
+        
+        {/* 데이터 영역 */}
+        <polygon points={dataPoints} fill="rgba(99, 102, 241, 0.3)" stroke="#6366f1" strokeWidth="2" />
+        
+        {/* 데이터 포인트 */}
+        {types.map((_, i) => {
+          const angle = i * angleStep - Math.PI / 2;
+          const value = values[i] / 100;
+          const x = cx + r * value * Math.cos(angle);
+          const y = cy + r * value * Math.sin(angle);
+          return <circle key={i} cx={x} cy={y} r="5" fill="#6366f1" />;
+        })}
+        
+        {/* 레이블 */}
+        {labels.map((label, i) => (
+          <text key={i} x={label.x} y={label.y} textAnchor="middle" className="text-[10px] fill-gray-700 font-medium">
+            {label.text}
+            <tspan x={label.x} dy="12" className="text-[9px] fill-indigo-600 font-bold">{label.value}</tspan>
+          </text>
+        ))}
+      </svg>
+    );
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-xl p-6">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
@@ -549,13 +655,13 @@ export default function OMRBatchGrading({ exams, students, branch }) {
 
       {/* 탭 */}
       <div className="flex gap-2 mb-6 border-b">
-        {['scan', 'manual', 'report'].map(tab => (
+        {['scan', 'manual', 'report', 'personal'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 font-medium transition ${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
           >
-            {tab === 'scan' ? '📷 OMR 스캔' : tab === 'manual' ? '✏️ 수동 입력' : '📄 성적표 생성'}
+            {tab === 'scan' ? '📷 OMR 스캔' : tab === 'manual' ? '✏️ 수동 입력' : tab === 'report' ? '📄 성적표 생성' : '📋 퍼스널 성취도'}
           </button>
         ))}
       </div>
@@ -878,6 +984,264 @@ export default function OMRBatchGrading({ exams, students, branch }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ★ 퍼스널 성취도 탭 */}
+      {activeTab === 'personal' && (
+        <div className="space-y-6">
+          {/* 입력 폼 */}
+          <div className="bg-gray-50 rounded-xl p-6 space-y-6">
+            <h3 className="font-bold text-lg text-gray-800">📋 퍼스널 성취도 입력</h3>
+            
+            {/* 기본 정보 */}
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">학생 이름</label>
+                <input
+                  type="text"
+                  value={personalData.studentName}
+                  onChange={(e) => setPersonalData({...personalData, studentName: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="학생 이름"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">날짜</label>
+                <input
+                  type="text"
+                  value={personalData.reportDate}
+                  onChange={(e) => setPersonalData({...personalData, reportDate: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="예: 2025.01.06"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">총점</label>
+                <input
+                  type="text"
+                  value={personalData.totalScore}
+                  onChange={(e) => setPersonalData({...personalData, totalScore: e.target.value})}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="예: 85/100"
+                />
+              </div>
+            </div>
+
+            {/* 영역별 밸런스 점수 (4가지) */}
+            <div>
+              <label className="block text-sm font-medium mb-2">영역별 밸런스 (0~100)</label>
+              <div className="grid grid-cols-4 gap-4">
+                {Object.keys(personalData.balanceScores).map(key => (
+                  <div key={key}>
+                    <label className="block text-xs text-gray-600 mb-1">{key}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={personalData.balanceScores[key]}
+                      onChange={(e) => setPersonalData({
+                        ...personalData,
+                        balanceScores: {...personalData.balanceScores, [key]: Number(e.target.value)}
+                      })}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 상세 영역별 내용 (4가지) */}
+            <div>
+              <label className="block text-sm font-medium mb-2">상세 영역별 성취도</label>
+              <div className="grid grid-cols-2 gap-4">
+                {Object.keys(personalData.detailContents).map(key => (
+                  <div key={key}>
+                    <label className="block text-xs text-gray-600 mb-1">{key}</label>
+                    <textarea
+                      value={personalData.detailContents[key]}
+                      onChange={(e) => setPersonalData({
+                        ...personalData,
+                        detailContents: {...personalData.detailContents, [key]: e.target.value}
+                      })}
+                      className="w-full px-3 py-2 border rounded-lg h-20"
+                      placeholder={`${key} 내용 입력`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 자기 점검 (2단 박스) */}
+            <div>
+              <label className="block text-sm font-medium mb-2">자기 점검</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <input
+                    type="text"
+                    value={personalData.selfCheck1Title}
+                    onChange={(e) => setPersonalData({...personalData, selfCheck1Title: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg mb-2"
+                    placeholder="제목 1"
+                  />
+                  <textarea
+                    value={personalData.selfCheck1Content}
+                    onChange={(e) => setPersonalData({...personalData, selfCheck1Content: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg h-24"
+                    placeholder="내용 입력"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={personalData.selfCheck2Title}
+                    onChange={(e) => setPersonalData({...personalData, selfCheck2Title: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg mb-2"
+                    placeholder="제목 2"
+                  />
+                  <textarea
+                    value={personalData.selfCheck2Content}
+                    onChange={(e) => setPersonalData({...personalData, selfCheck2Content: e.target.value})}
+                    className="w-full px-3 py-2 border rounded-lg h-24"
+                    placeholder="내용 입력"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 진단 메모 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">진단 메모</label>
+              <textarea
+                value={personalData.diagnosisMemo}
+                onChange={(e) => setPersonalData({...personalData, diagnosisMemo: e.target.value})}
+                className="w-full px-3 py-2 border rounded-lg h-32"
+                placeholder="진단 메모 입력"
+              />
+            </div>
+
+            {/* PDF 다운로드 버튼 */}
+            <div className="flex justify-end">
+              <button
+                onClick={async () => {
+                  if (!personalData.studentName) {
+                    alert('학생 이름을 입력해주세요.');
+                    return;
+                  }
+                  setIsGeneratingPersonalPdf(true);
+                  try {
+                    const html2canvas = (await import('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.esm.js')).default;
+                    const jsPDF = (await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')).jsPDF;
+                    
+                    const element = personalReportRef.current;
+                    const canvas = await html2canvas(element, { scale: 2, useCORS: true });
+                    const imgData = canvas.toDataURL('image/png');
+                    
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                    
+                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                    pdf.save(`퍼스널성취도_${personalData.studentName}_${personalData.reportDate || new Date().toLocaleDateString('ko-KR')}.pdf`);
+                  } catch (error) {
+                    console.error('PDF 생성 실패:', error);
+                    alert('PDF 생성에 실패했습니다.');
+                  }
+                  setIsGeneratingPersonalPdf(false);
+                }}
+                disabled={isGeneratingPersonalPdf}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg flex items-center gap-2 disabled:opacity-50"
+              >
+                {isGeneratingPersonalPdf ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
+                PDF 다운로드
+              </button>
+            </div>
+          </div>
+
+          {/* 미리보기 */}
+          <div ref={personalReportRef} className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden" style={{ maxWidth: '700px', margin: '0 auto' }}>
+            {/* 헤더 */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 flex justify-between items-center">
+              <div>
+                <span className="text-sm font-bold">오늘의 국어</span>
+              </div>
+              <div className="text-right">
+                <div className="text-xs opacity-80">퍼스널 성취도</div>
+                <div className="text-2xl font-bold">{personalData.totalScore || '-'}</div>
+              </div>
+            </div>
+
+            {/* 제목 */}
+            <div className="px-4 py-2 border-b">
+              <h1 className="text-lg font-bold text-gray-800">국어 컨설팅 분석 리포트</h1>
+              <p className="text-xs text-gray-500">{personalData.studentName || '학생 이름'} 학생 | {personalData.reportDate || '날짜'}</p>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* 영역별 분석 */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* 레이더 차트 */}
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                    영역별 밸런스 분석
+                  </h3>
+                  <div className="w-40 h-40 mx-auto">
+                    <PersonalRadarChart data={personalData.balanceScores} />
+                  </div>
+                </div>
+
+                {/* 영역별 성취도 */}
+                <div>
+                  <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                    상세 영역별 성취도
+                  </h3>
+                  <div className="space-y-2">
+                    {Object.entries(personalData.detailContents).map(([key, content]) => (
+                      <div key={key} className="bg-gray-50 rounded p-2">
+                        <div className="font-medium text-xs text-indigo-700 mb-1">{key}</div>
+                        <p className="text-xs text-gray-600" style={{ whiteSpace: 'pre-wrap' }}>{content || '-'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 자기 점검 (2단 박스) */}
+              <div>
+                <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
+                  자기 점검
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 px-3 py-1 text-xs font-medium">{personalData.selfCheck1Title || '제목 1'}</div>
+                    <div className="px-3 py-2 min-h-[80px] text-xs" style={{ whiteSpace: 'pre-wrap' }}>{personalData.selfCheck1Content || ''}</div>
+                  </div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-gray-100 px-3 py-1 text-xs font-medium">{personalData.selfCheck2Title || '제목 2'}</div>
+                    <div className="px-3 py-2 min-h-[80px] text-xs" style={{ whiteSpace: 'pre-wrap' }}>{personalData.selfCheck2Content || ''}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 진단 메모 */}
+              <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-3">
+                <h3 className="font-bold text-gray-800 mb-2 text-sm flex items-center gap-2">
+                  ✨ 오늘의 국어_퍼스널 진단
+                </h3>
+                <div className="bg-white rounded-lg p-3 min-h-[100px] text-xs" style={{ whiteSpace: 'pre-wrap' }}>
+                  {personalData.diagnosisMemo || ''}
+                </div>
+              </div>
+            </div>
+
+            {/* 푸터 */}
+            <div className="bg-gray-100 px-4 py-2 text-center text-xs text-gray-500">
+              오늘의 국어 연구소 | {new Date().toLocaleDateString('ko-KR')} 생성
+            </div>
+          </div>
         </div>
       )}
     </div>
