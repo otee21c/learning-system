@@ -3,16 +3,17 @@ import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, where, o
 import { db } from '../../firebase';
 import { getMonthWeek } from '../../utils/dateUtils';
 
-const AttendanceManager = () => {
-  const [students, setStudents] = useState([]);
+const AttendanceManager = ({ students: propStudents = [], branch }) => {
+  const [students, setStudents] = useState(propStudents);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayAttendance, setTodayAttendance] = useState({});
   const [loading, setLoading] = useState(false);
 
+  // props로 받은 학생 목록이 변경되면 업데이트
   useEffect(() => {
-    loadStudents();
-  }, []);
+    setStudents(propStudents);
+  }, [propStudents]);
 
   useEffect(() => {
     if (selectedDate) {

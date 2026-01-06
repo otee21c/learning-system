@@ -29,7 +29,7 @@ const TYPE_COLORS = {
 
 const SELECTION_START = 35;
 
-export default function WorkbookAnalysisManager({ students, selectedBranch }) {
+export default function WorkbookAnalysisManager({ students, branch }) {
   const [activeSubTab, setActiveSubTab] = useState('workbooks');
   const [workbooks, setWorkbooks] = useState([]);
   const [showAddWorkbook, setShowAddWorkbook] = useState(false);
@@ -54,7 +54,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
 
   // 지점별 학생 필터링
   const filteredStudents = students.filter(s => {
-    if (selectedBranch === 'baegot') {
+    if (branch === 'baegot') {
       return s.branch === 'baegot';
     } else {
       // 광진: branch가 없거나 빈 값이거나 'gwangjin'인 경우
@@ -62,7 +62,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
     }
   });
 
-  useEffect(() => { loadWorkbooks(); loadWrongAnswerRecords(); }, [selectedBranch]);
+  useEffect(() => { loadWorkbooks(); loadWrongAnswerRecords(); }, [branch]);
 
   // 지점 변경 시 선택 초기화
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
     setSelectedWorkbook(null);
     setAnalysisStudent(null);
     setAnalysisData(null);
-  }, [selectedBranch]);
+  }, [branch]);
 
   const loadWorkbooks = async () => {
     try {
@@ -78,7 +78,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       // 지점별 필터링
       const filtered = data.filter(w => {
-        if (selectedBranch === 'baegot') return w.branch === 'baegot';
+        if (branch === 'baegot') return w.branch === 'baegot';
         return !w.branch || w.branch === '' || w.branch === 'gwangjin';
       });
       setWorkbooks(filtered.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
@@ -91,7 +91,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       // 지점별 필터링
       const filtered = data.filter(r => {
-        if (selectedBranch === 'baegot') return r.branch === 'baegot';
+        if (branch === 'baegot') return r.branch === 'baegot';
         return !r.branch || r.branch === '' || r.branch === 'gwangjin';
       });
       setWrongAnswerRecords(filtered.sort((a, b) => new Date(b.date) - new Date(a.date)));
@@ -166,7 +166,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
       await addDoc(collection(db, 'workbooks'), { 
         ...newWorkbook, 
         pdfUrl, 
-        branch: selectedBranch === 'baegot' ? 'baegot' : '',
+        branch: branch === 'baegot' ? 'baegot' : '',
         createdAt: new Date() 
       });
       setSuccess('교재가 성공적으로 등록되었습니다!');
@@ -213,7 +213,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
         studentId: selectedStudent.id, studentName: selectedStudent.name, workbookId: selectedWorkbook,
         workbookName: workbook.name, wrongQuestions: wrongNums, analyzedTypes,
         selection: workbook.grade === '고3' ? studentSelection : null, date: wrongAnswerDate,
-        branch: selectedBranch === 'baegot' ? 'baegot' : '',
+        branch: branch === 'baegot' ? 'baegot' : '',
         createdAt: new Date()
       });
       setSuccess(selectedStudent.name + ' 학생의 오답이 저장되었습니다. (' + wrongNums.length + '문제)');
@@ -384,8 +384,8 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
         </div>
         
         {/* 현재 지점 표시 */}
-        <span className={'px-4 py-2 rounded-xl font-medium ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>
-          📍 {selectedBranch === 'gwangjin' ? '광진' : '배곧'}
+        <span className={'px-4 py-2 rounded-xl font-medium ' + (branch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>
+          📍 {branch === 'gwangjin' ? '광진' : '배곧'}
         </span>
       </div>
 
@@ -405,7 +405,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
           <button onClick={() => setShowAddWorkbook(!showAddWorkbook)} className="mb-4 flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all"><Plus size={20} />새 교재 등록</button>
           {showAddWorkbook && (
             <div className="mb-6 p-6 bg-amber-50 rounded-xl border border-amber-200">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">📚 새 교재 등록 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{selectedBranch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
+              <h3 className="text-lg font-bold text-gray-800 mb-4">📚 새 교재 등록 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (branch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{branch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">교재명 *</label><input type="text" value={newWorkbook.name} onChange={(e) => setNewWorkbook(prev => ({ ...prev, name: e.target.value }))} placeholder="예: 오늘의 주간지 12월" className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">학년</label><select value={newWorkbook.grade} onChange={(e) => handleGradeChange(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="고1">고1</option><option value="고2">고2</option><option value="고3">고3</option></select></div>
@@ -431,7 +431,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
             </div>
           )}
           <div className="space-y-3">
-            <h3 className="font-bold text-gray-800">등록된 교재 ({workbooks.length}) <span className={'text-sm px-2 py-1 rounded ml-2 ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{selectedBranch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
+            <h3 className="font-bold text-gray-800">등록된 교재 ({workbooks.length}) <span className={'text-sm px-2 py-1 rounded ml-2 ' + (branch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{branch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
             {workbooks.length === 0 ? <p className="text-gray-500 text-center py-8">등록된 교재가 없습니다.</p> : workbooks.map(workbook => (
               <div key={workbook.id} className="p-4 border rounded-xl hover:shadow-md transition-all">
                 <div className="flex items-center justify-between">
@@ -460,7 +460,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
       {activeSubTab === 'wrongAnswers' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="p-6 bg-gray-50 rounded-xl">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">✏️ 오답 입력 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{selectedBranch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">✏️ 오답 입력 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (branch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{branch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
             <div className="space-y-4">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">학생 선택 *</label><select value={selectedStudent?.id || ''} onChange={(e) => setSelectedStudent(filteredStudents.find(s => s.id === e.target.value))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="">학생을 선택하세요</option>{filteredStudents.map(s => <option key={s.id} value={s.id}>{s.name} ({s.id})</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">교재 선택 *</label><select value={selectedWorkbook || ''} onChange={(e) => setSelectedWorkbook(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="">교재를 선택하세요</option>{workbooks.map(w => <option key={w.id} value={w.id}>{w.name} ({w.grade})</option>)}</select></div>
@@ -499,7 +499,7 @@ export default function WorkbookAnalysisManager({ students, selectedBranch }) {
       {activeSubTab === 'analysis' && (
         <div>
           <div className="mb-6 p-6 bg-gray-50 rounded-xl">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">📊 약점 분석 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{selectedBranch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">📊 약점 분석 <span className={'text-sm px-2 py-1 rounded ml-2 ' + (branch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>{branch === 'gwangjin' ? '광진' : '배곧'}</span></h3>
             <div className="flex flex-wrap gap-4 items-end">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">학생 선택</label><select value={analysisStudent?.id || ''} onChange={(e) => setAnalysisStudent(filteredStudents.find(s => s.id === e.target.value))} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="">학생을 선택하세요</option>{filteredStudents.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">분석 기간</label><select value={analysisPeriod} onChange={(e) => setAnalysisPeriod(e.target.value)} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="week">최근 1주일</option><option value="month">이번 달</option></select></div>
