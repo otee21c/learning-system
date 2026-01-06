@@ -1,881 +1,650 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Upload, FileText, Trash2, Save, X, 
-  ChevronDown, ChevronUp, Camera, AlertCircle, Loader2,
-  CheckCircle, File, Printer, Download, Edit3
-} from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, FileText, Trash2, Edit3, Save } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
+import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-export default function OMRBatchGrading({ exams, students, branch }) {
-  // 탭 상태
-  const [activeTab, setActiveTab] = useState('scan');
+export default function OMRBatchGrading({ exams, students }) {
+  // 월/주차 선택 (기본값: 현재 월/주차)
+  const todayMonthWeek = getTodayMonthWeek();
+  const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
+  const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
   
-  // 시험 선택
-  const [selectedExamId, setSelectedExamId] = useState('');
-  const selectedExam = exams.find(e => e.id === selectedExamId);
+  // 선택한 월/주차에 해당하는 시험만 필터링
+  const filteredExams = exams.filter(exam => 
+    exam.month === selectedMonth && exam.week === selectedWeek
+  );
   
-  // PDF 및 인식 결과
-  const [pdfPages, setPdfPages] = useState([]);
-  const [scanResults, setScanResults] = useState([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
-  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
-  
-  // 수정 모드
-  const [editingIndex, setEditingIndex] = useState(null);
-  
-  // 저장 상태
-  const [isSaving, setIsSaving] = useState(false);
-  const [savedResults, setSavedResults] = useState([]);
-
-  // 수동 성적 입력용
-  const [manualScore, setManualScore] = useState({
-    studentId: '',
-    score: '',
-    maxScore: 100,
-    note: ''
+  const [batchGrading, setBatchGrading] = useState({
+    selectedExam: null,
+    omrList: []
   });
 
-  // 성적표 생성용
-  const [reportStudentId, setReportStudentId] = useState('');
-  const [reportExamId, setReportExamId] = useState('');
-  const [reportData, setReportData] = useState(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  
-  // 멘트 수정용
-  const [strengthComment, setStrengthComment] = useState('');
-  const [weaknessComment, setWeaknessComment] = useState('');
-  const [changeComment, setChangeComment] = useState('');
-  const [isEditingComments, setIsEditingComments] = useState(false);
+  // 수동 성적 기록용 state
+  const [manualScore, setManualScore] = useState({
+    studentId: '',
+    examType: '', // 시험 유형
+    maxScore: 100, // 기본 만점
+    score: '',
+    note: '' // 비고 (결석, 기타 사유 등)
+  });
 
-  // 성적표 ref
-  const reportRef = useRef(null);
-
-  // PDF.js 로드
-  useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-    script.async = true;
-    document.body.appendChild(script);
+  // 수동 성적 기록 저장
+  const handleManualScoreSave = async () => {
+    // 학생과 시험은 필수
+    if (!manualScore.studentId || !manualScore.examType) {
+      alert('학생과 시험을 선택해주세요.');
+      return;
+    }
     
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
-
-  // PDF 파일 업로드
-  const handlePdfUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('PDF 파일만 업로드 가능합니다.');
+    // 점수나 비고 중 하나는 입력해야 함
+    if (!manualScore.score && !manualScore.note) {
+      alert('점수 또는 비고를 입력해주세요.');
       return;
     }
 
-    setIsLoadingPdf(true);
-    setPdfPages([]);
-    setScanResults([]);
+    const hasScore = manualScore.score && manualScore.score.trim() !== '';
+    const score = hasScore ? parseInt(manualScore.score) : 0;
+    const maxScore = parseInt(manualScore.maxScore);
 
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      
-      if (!window.pdfjsLib) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const pages = [];
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const scale = 2;
-        const viewport = page.getViewport({ scale });
-        
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        await page.render({ canvasContext: context, viewport: viewport }).promise;
-        
-        const imageData = canvas.toDataURL('image/jpeg', 0.95);
-        pages.push({ pageNum: i, preview: imageData, base64: imageData.split(',')[1] });
-      }
-
-      setPdfPages(pages);
-      alert(`PDF에서 ${pages.length}장의 OMR을 추출했습니다.`);
-    } catch (error) {
-      alert('PDF 처리 오류: ' + error.message);
-    } finally {
-      setIsLoadingPdf(false);
+    // 점수가 입력된 경우에만 범위 검증
+    if (hasScore && (isNaN(score) || score < 0 || score > maxScore)) {
+      alert(`점수는 0점에서 ${maxScore}점 사이의 숫자여야 합니다.`);
+      return;
     }
-  };
-
-  const removePage = (index) => {
-    setPdfPages(prev => prev.filter((_, i) => i !== index));
-    setScanResults(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // Claude Vision OMR 인식
-  const scanOMRWithVision = async () => {
-    if (!selectedExam) { alert('시험을 선택해주세요.'); return; }
-    if (pdfPages.length === 0) { alert('PDF를 업로드해주세요.'); return; }
-
-    setIsScanning(true);
-    setScanProgress({ current: 0, total: pdfPages.length });
-    
-    const results = [];
-    
-    for (let i = 0; i < pdfPages.length; i++) {
-      setScanProgress({ current: i + 1, total: pdfPages.length });
-      
-      try {
-        const result = await analyzeOMRImage(pdfPages[i].base64, selectedExam);
-        results.push({
-          ...result,
-          pageIndex: i,
-          pageNum: pdfPages[i].pageNum,
-          matchedStudentId: findMatchingStudent(result.studentName)
-        });
-      } catch (error) {
-        results.push({
-          error: true,
-          pageIndex: i,
-          pageNum: pdfPages[i].pageNum,
-          studentName: '',
-          birthDate: '',
-          matchedStudentId: '',
-          answers: Array(selectedExam.totalQuestions).fill(0)
-        });
-      }
-    }
-    
-    setScanResults(results);
-    setIsScanning(false);
-  };
-
-  const findMatchingStudent = (name) => {
-    if (!name) return '';
-    let match = students.find(s => s.name === name);
-    if (match) return match.id;
-    match = students.find(s => s.name.includes(name) || name.includes(s.name));
-    return match ? match.id : '';
-  };
-
-  const analyzeOMRImage = async (base64Image, exam) => {
-    const prompt = `OMR 답안지 분석. JSON만 출력:
-{"studentName":"이름","birthDate":"MMDD","selectedSubject":"화작","answers":[1,2,3,...]}
-- answers: ${exam.totalQuestions}개, 마킹없으면 0`;
-
-    const response = await fetch('/api/analyze-omr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64Image, prompt })
-    });
-
-    if (!response.ok) throw new Error('OMR 분석 실패');
-    const data = await response.json();
-    
-    try {
-      const jsonMatch = data.result.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        while (parsed.answers.length < exam.totalQuestions) parsed.answers.push(0);
-        return parsed;
-      }
-    } catch (e) {}
-    
-    return { studentName: '', birthDate: '', selectedSubject: '화작', answers: Array(exam.totalQuestions).fill(0) };
-  };
-
-  const updateScanResult = (index, field, value) => {
-    setScanResults(prev => {
-      const updated = [...prev];
-      updated[index][field] = value;
-      return updated;
-    });
-  };
-
-  const updateAnswer = (resultIndex, answerIndex, value) => {
-    setScanResults(prev => {
-      const updated = [...prev];
-      const newAnswers = [...updated[resultIndex].answers];
-      newAnswers[answerIndex] = parseInt(value) || 0;
-      updated[resultIndex].answers = newAnswers;
-      return updated;
-    });
-  };
-
-  // 채점 및 저장
-  const saveAllResults = async () => {
-    if (!selectedExam || scanResults.length === 0) return;
-
-    setIsSaving(true);
-    const saved = [];
-
-    for (const result of scanResults) {
-      if (result.error || !result.matchedStudentId) {
-        saved.push({ ...result, saveStatus: result.error ? 'error' : 'not_found' });
-        continue;
-      }
-
-      try {
-        const gradingResult = gradeAnswers(result.answers, selectedExam);
-        const studentsRef = collection(db, 'students');
-        const snapshot = await getDocs(studentsRef);
-        const studentDoc = snapshot.docs.find(doc => doc.data().id === result.matchedStudentId);
-
-        if (studentDoc) {
-          const studentData = studentDoc.data();
-          const { month, week } = getMonthWeek(selectedExam.date);
-          
-          const examResult = {
-            examId: selectedExam.id,
-            examTitle: selectedExam.title,
-            date: selectedExam.date,
-            month, week,
-            totalScore: gradingResult.totalScore,
-            maxScore: gradingResult.maxScore,
-            percentage: gradingResult.percentage,
-            answers: result.answers,
-            results: gradingResult.results,
-            typeStats: gradingResult.typeStats,
-            weakTypes: gradingResult.weakTypes,
-            selectedSubject: result.selectedSubject || '화작'
-          };
-
-          await updateDoc(doc(db, 'students', studentDoc.id), {
-            exams: [...(studentData.exams || []), examResult]
-          });
-
-          saved.push({ ...result, saveStatus: 'success', score: gradingResult.totalScore, maxScore: gradingResult.maxScore });
-        }
-      } catch (error) {
-        saved.push({ ...result, saveStatus: 'error' });
-      }
-    }
-
-    setSavedResults(saved);
-    setIsSaving(false);
-    alert(`${saved.filter(s => s.saveStatus === 'success').length}명 저장 완료`);
-  };
-
-  const gradeAnswers = (studentAnswers, exam) => {
-    const results = [];
-    let totalScore = 0, maxScore = 0;
-    const typeStats = {};
-
-    exam.answers.forEach((correctAnswer, index) => {
-      const studentAnswer = studentAnswers[index] || 0;
-      const isCorrect = studentAnswer === parseInt(correctAnswer);
-      const score = exam.scores?.[index] || 2;
-      const type = exam.types?.[index] || '독서_정보 독해';
-
-      maxScore += score;
-      if (isCorrect) totalScore += score;
-
-      if (!typeStats[type]) typeStats[type] = { total: 0, correct: 0, totalScore: 0, earnedScore: 0 };
-      typeStats[type].total++;
-      typeStats[type].totalScore += score;
-      if (isCorrect) { typeStats[type].correct++; typeStats[type].earnedScore += score; }
-
-      results.push({ questionNum: index + 1, correct: correctAnswer, student: studentAnswer, isCorrect, score, type });
-    });
-
-    const weakTypes = Object.entries(typeStats)
-      .map(([type, stats]) => ({ type, correctRate: Math.round((stats.correct / stats.total) * 100), total: stats.total, correct: stats.correct }))
-      .filter(stat => stat.correctRate < 70)
-      .sort((a, b) => a.correctRate - b.correctRate);
-
-    return { totalScore, maxScore, percentage: ((totalScore / maxScore) * 100).toFixed(1), results, typeStats, weakTypes };
-  };
-
-  // 수동 저장
-  const handleManualScoreSave = async () => {
-    if (!manualScore.studentId || !selectedExamId) { alert('학생과 시험 선택'); return; }
 
     try {
       const studentsRef = collection(db, 'students');
       const snapshot = await getDocs(studentsRef);
       const studentDoc = snapshot.docs.find(doc => doc.data().id === manualScore.studentId);
-
+      
       if (studentDoc) {
         const studentData = studentDoc.data();
-        const { month, week } = getMonthWeek(selectedExam.date);
-        const score = manualScore.score ? parseInt(manualScore.score) : null;
-
+        
+        // 시험 유형 기반 결과 객체 생성
         const result = {
-          examId: selectedExam.id,
-          examTitle: selectedExam.title,
-          date: selectedExam.date,
-          month, week,
-          totalScore: score,
-          maxScore: parseInt(manualScore.maxScore),
-          percentage: score ? ((score / parseInt(manualScore.maxScore)) * 100).toFixed(1) : null,
-          note: manualScore.note,
-          manualEntry: true
+          examId: `manual-${Date.now()}`, // 고유 ID 생성
+          examTitle: manualScore.examType,
+          examType: manualScore.examType, // 시험 유형 저장
+          date: new Date().toISOString().split('T')[0],
+          totalScore: hasScore ? score : null,
+          maxScore: maxScore,
+          percentage: hasScore ? ((score / maxScore) * 100).toFixed(1) : null,
+          note: manualScore.note || '', // 비고 저장
+          results: [], // 수동 입력이므로 문항별 결과 없음
+          typeStats: {},
+          weakTypes: [],
+          feedback: manualScore.note || '수동으로 입력된 성적입니다.',
+          manualEntry: true, // 수동 입력 표시
+          month: selectedMonth, // 월 정보 저장
+          week: selectedWeek // 주차 정보 저장
         };
-
-        await updateDoc(doc(db, 'students', studentDoc.id), { exams: [...(studentData.exams || []), result] });
-        setManualScore({ studentId: '', score: '', maxScore: 100, note: '' });
-        alert('저장 완료');
-      }
-    } catch (error) {
-      alert('저장 실패: ' + error.message);
-    }
-  };
-
-  // ===== 성적표 생성 =====
-  const generateReport = () => {
-    if (!reportStudentId || !reportExamId) { alert('학생과 시험 선택'); return; }
-
-    const student = students.find(s => s.id === reportStudentId);
-    const exam = exams.find(e => e.id === reportExamId);
-    if (!student || !exam) return;
-
-    const examResult = student.exams?.find(e => e.examId === reportExamId);
-    if (!examResult) { alert('시험 결과 없음'); return; }
-
-    // 평균 계산
-    let totalStudents = 0, totalScoreSum = 0;
-    students.forEach(s => {
-      const result = s.exams?.find(e => e.examId === reportExamId);
-      if (result?.totalScore) { totalStudents++; totalScoreSum += result.totalScore; }
-    });
-    const classAverage = totalStudents > 0 ? (totalScoreSum / totalStudents).toFixed(1) : 0;
-
-    // 영역별 성취도 계산
-    const typeScores = {};
-    if (examResult.typeStats) {
-      Object.entries(examResult.typeStats).forEach(([type, stats]) => {
-        typeScores[type] = Math.round((stats.correct / stats.total) * 100);
-      });
-    }
-
-    // 이전 시험
-    const previousExams = (student.exams || [])
-      .filter(e => e.examId !== reportExamId && e.typeStats)
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5);
-
-    // 강점/약점 분석
-    const sortedTypes = Object.entries(typeScores).sort((a, b) => b[1] - a[1]);
-    const strongTypes = sortedTypes.filter(([_, rate]) => rate >= 80);
-    const weakTypesArr = sortedTypes.filter(([_, rate]) => rate < 70);
-
-    // 기본 멘트 생성
-    let defaultStrength = '';
-    let defaultWeakness = '';
-
-    if (strongTypes.length > 0) {
-      defaultStrength = `${strongTypes[0][0]} 영역의 성취도가 압도적입니다. 텍스트를 사실적으로 이해하는 능력이 매우 뛰어나 지문 분석 속도가 빠를 것으로 예상됩니다. 이 장점은 고난도 독서 지문에서 시간을 확보할 수 있는 핵심 경쟁력이 됩니다.`;
-    } else {
-      defaultStrength = '전반적으로 균형 잡힌 학습이 이루어지고 있습니다. 꾸준한 학습으로 모든 영역에서 안정적인 성취를 보이고 있습니다.';
-    }
-
-    if (weakTypesArr.length > 0) {
-      defaultWeakness = `${weakTypesArr[0][0]} 적용 유형에서 치명적인 오답이 발생했습니다. 지문 내용은 이해하나, 조건이 추가되었을 때의 논리적 추론이 약합니다. 매일 2지문 이상의 추론형 문항 집중 훈련이 반드시 병행되어야 합니다.`;
-    } else {
-      defaultWeakness = '현재 모든 영역에서 70% 이상의 성취도를 보이고 있습니다. 고난도 문항에 대한 심화 학습을 권장합니다.';
-    }
-
-    // 변화 분석
-    let defaultChange = '';
-    if (previousExams.length > 0) {
-      const prevResult = previousExams[0];
-      const scoreDiff = examResult.totalScore - prevResult.totalScore;
-      if (scoreDiff > 0) {
-        defaultChange = `이전 시험 대비 ${scoreDiff}점 상승했습니다. 꾸준한 학습의 효과가 나타나고 있습니다. 현재 학습 방향을 유지하면서 약점 영역을 보완하면 더 좋은 결과를 기대할 수 있습니다.`;
-      } else if (scoreDiff < 0) {
-        defaultChange = `이전 시험 대비 ${Math.abs(scoreDiff)}점 하락했습니다. 약점 영역에 대한 집중 학습이 필요합니다. 오답 유형을 분석하고 해당 영역의 기본 개념부터 다시 점검해 보세요.`;
+        
+        const updatedExams = [...(studentData.exams || []), result];
+        
+        await updateDoc(doc(db, 'students', studentDoc.id), {
+          exams: updatedExams
+        });
+        
+        setManualScore({ studentId: '', examType: '', maxScore: 100, score: '', note: '' });
+        alert('성적이 기록되었습니다!');
       } else {
-        defaultChange = '이전 시험과 동일한 점수를 유지하고 있습니다. 안정적인 성취를 보이고 있으나, 성적 향상을 위해 약점 영역에 대한 집중 학습이 필요합니다.';
+        alert('학생을 찾을 수 없습니다.');
       }
-    } else {
-      defaultChange = '첫 시험 결과입니다. 이번 결과를 기준으로 학습 계획을 수립하시기 바랍니다.';
-    }
-
-    setStrengthComment(defaultStrength);
-    setWeaknessComment(defaultWeakness);
-    setChangeComment(defaultChange);
-
-    setReportData({
-      student, exam, examResult, classAverage, typeScores, previousExams, strongTypes, weakTypesArr
-    });
-  };
-
-  // PDF 다운로드
-  const downloadPdf = async () => {
-    if (!reportRef.current) return;
-    
-    setIsGeneratingPdf(true);
-    
-    try {
-      const html2canvas = (await import('html2canvas')).default;
-      const jsPDF = (await import('jspdf')).default;
-      
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      
-      // 여백 설정 (mm)
-      const margin = 10;
-      const contentWidth = pdfWidth - (margin * 2);
-      const contentHeight = pdfHeight - (margin * 2);
-      
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // 비율 계산 (여백 고려)
-      const ratio = Math.min(contentWidth / imgWidth, contentHeight / imgHeight);
-      const scaledWidth = imgWidth * ratio;
-      const scaledHeight = imgHeight * ratio;
-      
-      // 중앙 정렬
-      const imgX = (pdfWidth - scaledWidth) / 2;
-      const imgY = margin; // 상단 여백
-      
-      pdf.addImage(imgData, 'JPEG', imgX, imgY, scaledWidth, scaledHeight);
-      
-      pdf.save(`성적표_${reportData.student.name}_${reportData.exam.title}.pdf`);
     } catch (error) {
-      console.error('PDF 생성 오류:', error);
-      alert('PDF 생성 실패');
-    } finally {
-      setIsGeneratingPdf(false);
+      console.error('성적 기록 실패:', error);
+      alert('성적 기록에 실패했습니다: ' + error.message);
     }
   };
 
-  // 레이더 차트 SVG
-  const RadarChart = ({ data }) => {
-    const types = Object.keys(data);
-    const values = Object.values(data);
-    const n = types.length;
-    if (n === 0) return null;
+  // 피드백 생성
+  const generateFeedback = (weakTypes) => {
+    if (weakTypes.length === 0) {
+      return "모든 영역에서 우수한 성적을 보였습니다! 현재 수준을 유지하세요.";
+    }
 
-    const cx = 120, cy = 120, r = 80;
-    const angleStep = (2 * Math.PI) / n;
-
-    // 배경 다각형 (100%, 75%, 50%, 25%)
-    const createPolygon = (radius) => {
-      return types.map((_, i) => {
-        const angle = i * angleStep - Math.PI / 2;
-        const x = cx + radius * Math.cos(angle);
-        const y = cy + radius * Math.sin(angle);
-        return `${x},${y}`;
-      }).join(' ');
+    const feedbackMap = {
+      '사실적 이해': '지문에 직접 제시된 내용을 정확히 파악하는 연습이 필요합니다.',
+      '추론적 이해': '글의 숨은 의미와 작가의 의도를 파악하는 능력이 부족합니다.',
+      '비판적 이해': '글의 논리와 주장을 평가하는 능력을 키워야 합니다.',
+      '어휘/문법': '어휘력과 문법 지식이 부족합니다.',
+      '문학 감상': '작품의 정서와 분위기를 이해하는 능력이 필요합니다.',
+      '작품 분석': '작품의 표현 기법과 구조를 분석하는 연습이 필요합니다.'
     };
 
-    // 데이터 다각형
-    const dataPoints = types.map((_, i) => {
-      const angle = i * angleStep - Math.PI / 2;
-      const value = values[i] / 100;
-      const x = cx + r * value * Math.cos(angle);
-      const y = cy + r * value * Math.sin(angle);
-      return `${x},${y}`;
-    }).join(' ');
-
-    // 레이블 위치
-    const labels = types.map((type, i) => {
-      const angle = i * angleStep - Math.PI / 2;
-      const x = cx + (r + 25) * Math.cos(angle);
-      const y = cy + (r + 25) * Math.sin(angle);
-      const shortType = type.replace('독해', '').replace('영역', '').replace('_', '\n');
-      return { x, y, text: shortType };
+    let feedback = "약점 영역 분석\n\n";
+    
+    weakTypes.forEach((stat, index) => {
+      feedback += `${index + 1}. ${stat.type} (정답률 ${stat.correctRate}%)\n`;
+      feedback += `   - ${feedbackMap[stat.type]}\n\n`;
     });
 
-    return (
-      <svg viewBox="0 0 240 240" className="w-full h-full">
-        {/* 배경 그리드 */}
-        <polygon points={createPolygon(r)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
-        <polygon points={createPolygon(r * 0.75)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
-        <polygon points={createPolygon(r * 0.5)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
-        <polygon points={createPolygon(r * 0.25)} fill="none" stroke="#e5e7eb" strokeWidth="1" />
+    return feedback;
+  };
+
+  // OMR 이미지 업로드
+  const handleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const exam = exams.find(e => e.id === batchGrading.selectedExam);
+    if (!exam) return;
+
+    const newOMRs = [];
+
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const fileName = file.name.replace(/\.(jpg|jpeg|png|gif)$/i, '');
         
-        {/* 축 */}
-        {types.map((_, i) => {
-          const angle = i * angleStep - Math.PI / 2;
-          const x2 = cx + r * Math.cos(angle);
-          const y2 = cy + r * Math.sin(angle);
-          return <line key={i} x1={cx} y1={cy} x2={x2} y2={y2} stroke="#e5e7eb" strokeWidth="1" />;
-        })}
+        let matchedStudent = null;
         
-        {/* 데이터 영역 */}
-        <polygon points={dataPoints} fill="rgba(99, 102, 241, 0.3)" stroke="#6366f1" strokeWidth="2" />
+        // 이름_생년월일 패턴으로 매칭
+        const nameBirthPattern = /(.+)_(\d{4})/;
+        const match = fileName.match(nameBirthPattern);
         
-        {/* 데이터 포인트 */}
-        {types.map((_, i) => {
-          const angle = i * angleStep - Math.PI / 2;
-          const value = values[i] / 100;
-          const x = cx + r * value * Math.cos(angle);
-          const y = cy + r * value * Math.sin(angle);
-          return <circle key={i} cx={x} cy={y} r="4" fill="#6366f1" />;
-        })}
+        if (match) {
+          const [, name, birthDate] = match;
+          matchedStudent = students.find(s => 
+            s.name.toLowerCase().includes(name.toLowerCase()) && 
+            s.birthDate === birthDate
+          );
+        }
         
-        {/* 레이블 */}
-        {labels.map((label, i) => (
-          <text key={i} x={label.x} y={label.y} textAnchor="middle" className="text-[8px] fill-gray-600">
-            {label.text.split('\n').map((line, j) => (
-              <tspan key={j} x={label.x} dy={j === 0 ? 0 : 10}>{line}</tspan>
-            ))}
-          </text>
-        ))}
-      </svg>
-    );
+        // 매칭 실패 시 이름이나 ID로 재시도
+        if (!matchedStudent) {
+          matchedStudent = students.find(s => 
+            fileName.toLowerCase().includes(s.id.toLowerCase()) ||
+            fileName.toLowerCase().includes(s.name.toLowerCase())
+          );
+        }
+
+        const omr = {
+          id: Date.now() + index,
+          studentId: matchedStudent?.id || '',
+          studentName: matchedStudent?.name || '미매칭',
+          studentBirthDate: matchedStudent?.birthDate || '',
+          imagePreview: reader.result,
+          fileName: file.name,
+          answers: Array(exam.totalQuestions).fill(''),
+          autoMatched: !!matchedStudent
+        };
+
+        newOMRs.push(omr);
+
+        if (newOMRs.length === files.length) {
+          setBatchGrading({
+            ...batchGrading,
+            omrList: [...batchGrading.omrList, ...newOMRs]
+          });
+          alert(`${files.length}개의 OMR이 업로드되었습니다.`);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // OMR 학생 매칭 변경
+  const updateOMRStudent = (omrId, studentId) => {
+    const student = students.find(s => s.id === studentId);
+    setBatchGrading({
+      ...batchGrading,
+      omrList: batchGrading.omrList.map(omr => 
+        omr.id === omrId ? { 
+          ...omr, 
+          studentId, 
+          studentName: student?.name || '미매칭', 
+          studentBirthDate: student?.birthDate || '' 
+        } : omr
+      )
+    });
+  };
+
+  // OMR 답안 업데이트
+  const updateOMRAnswers = (omrId, answers) => {
+    setBatchGrading({
+      ...batchGrading,
+      omrList: batchGrading.omrList.map(omr => 
+        omr.id === omrId ? { ...omr, answers } : omr
+      )
+    });
+  };
+
+  // OMR 삭제
+  const removeOMR = (omrId) => {
+    setBatchGrading({
+      ...batchGrading,
+      omrList: batchGrading.omrList.filter(omr => omr.id !== omrId)
+    });
+  };
+
+  // 일괄 채점
+  const handleBatchGrade = async () => {
+    if (batchGrading.omrList.length === 0) {
+      alert('채점할 OMR이 없습니다.');
+      return;
+    }
+
+    const exam = exams.find(e => e.id === batchGrading.selectedExam);
+    if (!exam) return;
+
+    let gradedCount = 0;
+
+    // 각 학생별로 채점
+    for (const omr of batchGrading.omrList) {
+      if (!omr.studentId) continue;
+
+      let totalScore = 0;
+      const results = [];
+      const typeStats = {};
+
+      for (let i = 0; i < exam.totalQuestions; i++) {
+        const isCorrect = omr.answers[i] === exam.answers[i];
+        const questionType = exam.types[i];
+        
+        if (isCorrect) {
+          totalScore += exam.scores[i];
+        }
+        
+        results.push({
+          questionNum: i + 1,
+          studentAnswer: omr.answers[i],
+          correctAnswer: exam.answers[i],
+          isCorrect,
+          score: isCorrect ? exam.scores[i] : 0,
+          type: questionType
+        });
+
+        if (!typeStats[questionType]) {
+          typeStats[questionType] = { total: 0, correct: 0, incorrect: 0 };
+        }
+        typeStats[questionType].total++;
+        if (isCorrect) {
+          typeStats[questionType].correct++;
+        } else {
+          typeStats[questionType].incorrect++;
+        }
+      }
+
+      const weakTypes = Object.entries(typeStats)
+        .map(([type, stats]) => ({
+          type,
+          correctRate: (stats.correct / stats.total * 100).toFixed(1),
+          ...stats
+        }))
+        .filter(stat => stat.correctRate < 70)
+        .sort((a, b) => a.correctRate - b.correctRate);
+
+      const feedback = generateFeedback(weakTypes);
+
+      const maxScore = exam.scores.reduce((a, b) => a + b, 0);
+      const result = {
+        examId: exam.id,
+        examTitle: exam.title,
+        date: new Date().toISOString().split('T')[0],
+        totalScore,
+        maxScore,
+        percentage: ((totalScore / maxScore) * 100).toFixed(1),
+        results,
+        typeStats,
+        weakTypes,
+        feedback
+      };
+
+      // Firestore에 저장
+      try {
+        const studentsRef = collection(db, 'students');
+        const snapshot = await getDocs(studentsRef);
+        const studentDoc = snapshot.docs.find(doc => doc.data().id === omr.studentId);
+        
+        if (studentDoc) {
+          const studentData = studentDoc.data();
+          const updatedExams = [...(studentData.exams || []), result];
+          
+          await updateDoc(doc(db, 'students', studentDoc.id), {
+            exams: updatedExams
+          });
+          
+          gradedCount++;
+        }
+      } catch (error) {
+        console.error('채점 결과 저장 실패:', error);
+      }
+    }
+
+    setBatchGrading({
+      selectedExam: null,
+      omrList: []
+    });
+
+    alert(`총 ${gradedCount}명의 학생이 채점되었습니다!`);
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-6">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-        <Camera className="text-indigo-600" />
-        OMR 일괄 채점
-      </h2>
+    <div className="space-y-6">
+      {/* 수동 성적 기록 섹션 */}
+      <div className="bg-white rounded-2xl shadow-lg p-8 border-2 border-purple-200">
+        <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent flex items-center gap-2">
+          <Edit3 size={24} />
+          수동 성적 기록
+        </h2>
+        <p className="text-gray-600 mb-6 text-sm">
+          학생과 시험을 선택하고 점수를 직접 입력하세요
+        </p>
 
-      {/* 탭 */}
-      <div className="flex gap-2 mb-6 border-b">
-        {['scan', 'manual', 'report'].map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 font-medium transition ${activeTab === tab ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}
-          >
-            {tab === 'scan' ? '📷 OMR 스캔' : tab === 'manual' ? '✏️ 수동 입력' : '📄 성적표 생성'}
-          </button>
-        ))}
-      </div>
-
-      {/* 시험 선택 */}
-      {(activeTab === 'scan' || activeTab === 'manual') && (
-        <div className="mb-6 p-4 bg-gray-50 rounded-xl">
-          <label className="block text-sm font-medium mb-2">시험 선택</label>
-          <select value={selectedExamId} onChange={(e) => setSelectedExamId(e.target.value)} className="w-full md:w-1/2 px-4 py-2 border rounded-lg">
-            <option value="">-- 선택 --</option>
-            {exams.map(exam => <option key={exam.id} value={exam.id}>{exam.title} ({exam.date})</option>)}
-          </select>
+        {/* 월/주차 선택 */}
+        <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl">
+          <h3 className="font-semibold text-sm mb-3 text-gray-700">조회 기간 선택</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">월 선택</label>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                  <option key={month} value={month}>{month}월</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">주차 선택</label>
+              <select
+                value={selectedWeek}
+                onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
+                className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              >
+                {[1, 2, 3, 4, 5].map(week => (
+                  <option key={week} value={week}>{week}주차</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-gray-600 bg-white p-2 rounded-lg">
+            💡 선택: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedWeek}주차</span>
+          </div>
         </div>
-      )}
 
-      {/* OMR 스캔 탭 */}
-      {activeTab === 'scan' && (
-        <div className="space-y-6">
-          <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center">
-            <input type="file" accept="application/pdf" onChange={handlePdfUpload} className="hidden" id="pdf-upload" />
-            <label htmlFor="pdf-upload" className="cursor-pointer">
-              {isLoadingPdf ? <Loader2 className="mx-auto h-12 w-12 text-indigo-500 animate-spin" /> : <File className="mx-auto h-12 w-12 text-gray-400" />}
-              <p className="mt-2">{isLoadingPdf ? 'PDF 처리 중...' : 'PDF 파일 업로드'}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {/* 학생 선택 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              학생 선택 *
             </label>
+            <select
+              value={manualScore.studentId}
+              onChange={(e) => setManualScore({ ...manualScore, studentId: e.target.value })}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="">학생을 선택하세요</option>
+              {students.map(student => (
+                <option key={student.id} value={student.id}>
+                  {student.name} ({student.grade})
+                </option>
+              ))}
+            </select>
           </div>
 
-          {pdfPages.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span>추출된 OMR ({pdfPages.length}장)</span>
-                <button onClick={scanOMRWithVision} disabled={isScanning || !selectedExam} className="px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
-                  {isScanning ? <><Loader2 className="animate-spin" size={18} />{scanProgress.current}/{scanProgress.total}</> : <><Camera size={18} />AI 인식</>}
-                </button>
+          {/* 시험 유형 선택 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              시험 선택 *
+            </label>
+            <select
+              value={manualScore.examType}
+              onChange={(e) => setManualScore({ ...manualScore, examType: e.target.value })}
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="">시험을 선택하세요</option>
+              <option value="복습 test">복습 test</option>
+              <option value="진단 test">진단 test</option>
+              <option value="점검 test">점검 test</option>
+              <option value="모의고사">모의고사</option>
+            </select>
+          </div>
+
+          {/* 점수 입력 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              점수 입력
+              {manualScore.examType && (
+                <span className="text-xs text-gray-500 ml-1">
+                  (최대 {manualScore.maxScore}점)
+                </span>
+              )}
+            </label>
+            <input
+              type="number"
+              value={manualScore.score}
+              onChange={(e) => setManualScore({ ...manualScore, score: e.target.value })}
+              placeholder="점수를 입력하세요"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              min="0"
+              max={manualScore.maxScore}
+            />
+          </div>
+
+          {/* 비고 입력 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              비고
+              <span className="text-xs text-gray-500 ml-1">(결석, 사유 등)</span>
+            </label>
+            <input
+              type="text"
+              value={manualScore.note}
+              onChange={(e) => setManualScore({ ...manualScore, note: e.target.value })}
+              placeholder="예: 결석, 조퇴"
+              className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <button
+          onClick={handleManualScoreSave}
+          disabled={!manualScore.studentId || !manualScore.examType || (!manualScore.score && !manualScore.note)}
+          className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg hover:shadow-lg transition-all font-semibold disabled:from-gray-300 disabled:to-gray-400 flex items-center justify-center gap-2"
+        >
+          <Save size={20} />
+          성적 기록하기
+        </button>
+      </div>
+
+      {/* 기존 OMR 일괄 채점 섹션 */}
+      {!batchGrading.selectedExam ? (
+        // 시험 선택
+        <div className="bg-white rounded-2xl shadow-lg p-8">
+          <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            OMR 일괄 채점
+          </h2>
+          
+          {/* 월/주차 선택 */}
+          <div className="mb-6 p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl">
+            <h3 className="font-bold text-lg mb-4 text-gray-800">조회 기간 선택</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">월 선택</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(month => (
+                    <option key={month} value={month}>{month}월</option>
+                  ))}
+                </select>
               </div>
-              <div className="grid grid-cols-4 gap-4">
-                {pdfPages.map((page, i) => (
-                  <div key={i} className="relative group">
-                    <img src={page.preview} alt="" className="w-full h-32 object-contain border rounded bg-gray-100" />
-                    <button onClick={() => removePage(i)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100"><X size={12} /></button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">주차 선택</label>
+                <select
+                  value={selectedWeek}
+                  onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  {[1, 2, 3, 4, 5].map(week => (
+                    <option key={week} value={week}>{week}주차</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 text-sm text-gray-600 bg-white p-3 rounded-lg">
+              💡 선택된 기간: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedWeek}주차</span>
+            </div>
+          </div>
+          
+          <p className="text-gray-600 mb-6">채점할 시험을 선택하세요</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredExams.map((exam) => (
+              <button
+                key={exam.id}
+                onClick={() => setBatchGrading({ ...batchGrading, selectedExam: exam.id })}
+                className="text-left p-6 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:shadow-lg transition-all bg-gradient-to-r from-gray-50 to-green-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl">
+                    <FileText className="text-white" size={24} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-lg">{exam.title}</p>
+                      {exam.month && exam.week && (
+                        <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
+                          {exam.month}월 {exam.week}주차
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">{exam.subject} | {exam.date}</p>
+                    <p className="text-xs text-gray-500 mt-1">총 {exam.totalQuestions}문항</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {filteredExams.length === 0 && (
+            <div className="text-center py-16">
+              <div className="inline-block p-6 bg-gray-100 rounded-full mb-4">
+                <FileText className="text-gray-400" size={48} />
+              </div>
+              <p className="text-gray-500 text-lg">{selectedMonth}월 {selectedWeek}주차에 등록된 시험이 없습니다.</p>
+              <p className="text-gray-400 text-sm mt-2">다른 월/주차를 선택해보세요.</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        // OMR 업로드 및 채점
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  {exams.find(e => e.id === batchGrading.selectedExam)?.title}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">OMR 답안지를 업로드하세요</p>
+              </div>
+              <button
+                onClick={() => setBatchGrading({ selectedExam: null, omrList: [] })}
+                className="px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition text-sm font-medium"
+              >
+                ← 시험 선택으로
+              </button>
+            </div>
+
+            <div className="border-2 border-dashed border-indigo-300 rounded-2xl p-8 bg-gradient-to-br from-blue-50 to-indigo-50 text-center">
+              <Upload className="mx-auto text-indigo-600 mb-4" size={64} />
+              <h3 className="font-bold text-xl mb-2 text-gray-800">OMR 이미지 업로드</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                한 번에 여러 장 선택 가능 (파일명: 이름_생년월일.jpg)
+              </p>
+              <label className="inline-block cursor-pointer bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:shadow-lg transition-all font-medium">
+                파일 선택
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
+
+          {batchGrading.omrList.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <h3 className="text-xl font-bold mb-6 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                업로드된 OMR ({batchGrading.omrList.length}명)
+              </h3>
+              
+              <div className="space-y-4">
+                {batchGrading.omrList.map((omr) => (
+                  <div key={omr.id} className="border-2 border-gray-200 rounded-xl p-5 bg-gradient-to-r from-gray-50 to-blue-50">
+                    <div className="flex items-start gap-4">
+                      <img 
+                        src={omr.imagePreview} 
+                        alt="OMR"
+                        className="w-24 h-24 object-contain border-2 border-gray-300 rounded-lg bg-white shadow-sm"
+                      />
+                      <div className="flex-1">
+                        <p className="text-xs text-gray-500 mb-2 font-medium">{omr.fileName}</p>
+                        <select
+                          value={omr.studentId}
+                          onChange={(e) => updateOMRStudent(omr.id, e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg text-sm mb-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        >
+                          <option value="">학생 선택</option>
+                          {students.map(student => (
+                            <option key={student.id} value={student.id}>
+                              {student.name} ({student.birthDate})
+                            </option>
+                          ))}
+                        </select>
+                        
+                        <div className="border-2 border-gray-200 rounded-lg p-4 bg-white">
+                          <p className="text-xs font-semibold mb-2 text-gray-700">답안 입력</p>
+                          <div className="grid grid-cols-8 gap-1 max-h-24 overflow-y-auto">
+                            {[...Array(exams.find(e => e.id === batchGrading.selectedExam)?.totalQuestions || 0)].map((_, i) => (
+                              <select
+                                key={i}
+                                value={omr.answers[i] || ''}
+                                onChange={(e) => {
+                                  const newAnswers = [...omr.answers];
+                                  newAnswers[i] = e.target.value;
+                                  updateOMRAnswers(omr.id, newAnswers);
+                                }}
+                                className="px-1 py-1 border rounded text-xs"
+                              >
+                                <option value="">{i + 1}</option>
+                                <option value="1">①</option>
+                                <option value="2">②</option>
+                                <option value="3">③</option>
+                                <option value="4">④</option>
+                                <option value="5">⑤</option>
+                              </select>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <button
+                          onClick={() => removeOMR(omr.id)}
+                          className="mt-3 flex items-center gap-2 text-red-600 hover:bg-red-50 px-3 py-1 rounded-lg transition text-sm font-medium"
+                        >
+                          <Trash2 size={14} />
+                          삭제
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
 
-          {scanResults.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span>인식 결과 ({scanResults.length}명)</span>
-                <button onClick={saveAllResults} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
-                  {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}저장
-                </button>
-              </div>
-              <table className="w-full text-sm border-collapse">
-                <thead><tr className="bg-gray-100"><th className="px-2 py-2">상태</th><th className="px-2 py-2">이름</th><th className="px-2 py-2">학생</th><th className="px-2 py-2">답안</th><th className="px-2 py-2">수정</th></tr></thead>
-                <tbody>
-                  {scanResults.map((result, i) => {
-                    const saved = savedResults.find(s => s.pageIndex === i);
-                    return (
-                      <React.Fragment key={i}>
-                        <tr className="border-b">
-                          <td className="px-2 py-2">{saved?.saveStatus === 'success' ? <span className="text-green-600">{saved.score}/{saved.maxScore}</span> : saved?.saveStatus ? <span className="text-yellow-600">!</span> : '-'}</td>
-                          <td className="px-2 py-2">{result.studentName || '-'}</td>
-                          <td className="px-2 py-2">
-                            <select value={result.matchedStudentId || ''} onChange={(e) => updateScanResult(i, 'matchedStudentId', e.target.value)} className="w-24 border rounded px-1 py-1">
-                              <option value="">선택</option>
-                              {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-2 py-2 text-gray-500">{result.answers?.slice(0, 6).join(',')}...</td>
-                          <td className="px-2 py-2"><button onClick={() => setEditingIndex(editingIndex === i ? null : i)}>{editingIndex === i ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button></td>
-                        </tr>
-                        {editingIndex === i && (
-                          <tr><td colSpan={5} className="bg-gray-50 p-3">
-                            <div className="grid grid-cols-9 gap-1">
-                              {result.answers?.map((ans, j) => (
-                                <div key={j} className="flex items-center gap-1">
-                                  <span className="text-xs w-4">{j+1}</span>
-                                  <select value={ans} onChange={(e) => updateAnswer(i, j, e.target.value)} className={`w-10 border rounded text-xs ${ans === 0 ? 'bg-red-50' : ''}`}>
-                                    <option value={0}>-</option>
-                                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
-                                  </select>
-                                </div>
-                              ))}
-                            </div>
-                          </td></tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 수동 입력 탭 */}
-      {activeTab === 'manual' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">학생</label>
-              <select value={manualScore.studentId} onChange={(e) => setManualScore({...manualScore, studentId: e.target.value})} className="w-full px-4 py-2 border rounded-lg">
-                <option value="">선택</option>
-                {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">점수</label>
-              <div className="flex gap-2">
-                <input type="number" value={manualScore.score} onChange={(e) => setManualScore({...manualScore, score: e.target.value})} className="flex-1 px-4 py-2 border rounded-lg" placeholder="점수" />
-                <span className="flex items-center">/</span>
-                <input type="number" value={manualScore.maxScore} onChange={(e) => setManualScore({...manualScore, maxScore: e.target.value})} className="w-16 px-2 py-2 border rounded-lg" />
-              </div>
-            </div>
-          </div>
-          <button onClick={handleManualScoreSave} disabled={!selectedExamId} className="px-6 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50">저장</button>
-        </div>
-      )}
-
-      {/* 성적표 생성 탭 */}
-      {activeTab === 'report' && (
-        <div className="space-y-6">
-          {/* 선택 영역 */}
-          <div className="grid grid-cols-4 gap-4 p-4 bg-gray-50 rounded-xl">
-            <div>
-              <label className="block text-sm font-medium mb-1">학생</label>
-              <select value={reportStudentId} onChange={(e) => setReportStudentId(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-                <option value="">선택</option>
-                {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">시험</label>
-              <select value={reportExamId} onChange={(e) => setReportExamId(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-                <option value="">선택</option>
-                {exams.map(e => <option key={e.id} value={e.id}>{e.title}</option>)}
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button onClick={generateReport} className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center gap-2">
-                <FileText size={18} />생성
+              <button
+                onClick={handleBatchGrade}
+                disabled={batchGrading.omrList.some(omr => !omr.studentId)}
+                className="w-full mt-6 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl hover:shadow-lg disabled:from-gray-300 disabled:to-gray-400 transition-all font-bold text-lg"
+              >
+                전체 일괄 채점 ({batchGrading.omrList.filter(omr => omr.studentId).length}명)
               </button>
-            </div>
-            <div className="flex items-end gap-2">
-              {reportData && (
-                <>
-                  <button onClick={() => setIsEditingComments(!isEditingComments)} className="px-3 py-2 bg-yellow-500 text-white rounded-lg flex items-center gap-1">
-                    <Edit3 size={16} />멘트 수정
-                  </button>
-                  <button onClick={downloadPdf} disabled={isGeneratingPdf} className="px-3 py-2 bg-green-600 text-white rounded-lg flex items-center gap-1 disabled:opacity-50">
-                    {isGeneratingPdf ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}PDF
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* 멘트 수정 영역 */}
-          {isEditingComments && reportData && (
-            <div className="p-4 bg-yellow-50 rounded-xl space-y-4">
-              <h4 className="font-semibold text-yellow-800">📝 멘트 수정</h4>
-              <div>
-                <label className="block text-sm font-medium mb-1">강점 분석</label>
-                <textarea value={strengthComment} onChange={(e) => setStrengthComment(e.target.value)} className="w-full px-3 py-2 border rounded-lg h-20" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">약점 및 제언</label>
-                <textarea value={weaknessComment} onChange={(e) => setWeaknessComment(e.target.value)} className="w-full px-3 py-2 border rounded-lg h-20" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">변화 분석</label>
-                <textarea value={changeComment} onChange={(e) => setChangeComment(e.target.value)} className="w-full px-3 py-2 border rounded-lg h-20" />
-              </div>
-            </div>
-          )}
-
-          {/* 성적표 미리보기 */}
-          {reportData && (
-            <div ref={reportRef} className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden" style={{ maxWidth: '700px', margin: '0 auto' }}>
-              {/* 헤더 */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 flex justify-between items-center">
-                <div>
-                  <span className="text-xs bg-blue-500 px-2 py-0.5 rounded">PERSONAL DIAGNOSIS</span>
-                  <span className="text-xs ml-2 opacity-80">ID: {reportData.student.id?.slice(0,4)}-{new Date().getFullYear()}{String(new Date().getMonth()+1).padStart(2,'0')}</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs opacity-80">MY TOTAL SCORE</div>
-                  <div className="text-2xl font-bold">{reportData.examResult.totalScore}<span className="text-sm opacity-80">/{reportData.examResult.maxScore}</span></div>
-                </div>
-              </div>
-
-              {/* 제목 */}
-              <div className="px-4 py-2 border-b">
-                <h1 className="text-lg font-bold text-gray-800">국어 성취도 분석 리포트</h1>
-                <p className="text-xs text-gray-500">{reportData.student.name} 학생 | {reportData.exam.date} {reportData.exam.title}</p>
-              </div>
-
-              <div className="p-4 space-y-4">
-                {/* 영역별 분석 */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* 레이더 차트 */}
-                  <div>
-                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-                      영역별 밸런스 분석
-                    </h3>
-                    <div className="w-40 h-40 mx-auto">
-                      <RadarChart data={reportData.typeScores} />
-                    </div>
-                  </div>
-
-                  {/* 영역별 성취도 */}
-                  <div>
-                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-                      상세 영역별 성취도
-                    </h3>
-                    <div className="space-y-1">
-                      {Object.entries(reportData.typeScores)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([type, rate]) => (
-                          <div key={type} className={`flex justify-between items-center px-2 py-1 rounded text-xs ${rate < 70 ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
-                            <span>{type}</span>
-                            <span className={`font-bold ${rate >= 80 ? 'text-blue-600' : rate >= 70 ? 'text-gray-700' : 'text-orange-600'}`}>{rate}%</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 문항 채점표 */}
-                <div>
-                  <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-                    문항 채점표
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[0, 1].map(col => (
-                      <table key={col} className="w-full border-collapse" style={{fontSize: '10px'}}>
-                        <thead>
-                          <tr className="bg-gray-100">
-                            <th className="border px-1 py-0.5 w-8">문항</th>
-                            <th className="border px-1 py-0.5">영역</th>
-                            <th className="border px-1 py-0.5 w-8">배점</th>
-                            <th className="border px-1 py-0.5 w-8">정답</th>
-                            <th className="border px-1 py-0.5 w-8">채점</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {reportData.examResult.results
-                            ?.slice(col * Math.ceil(reportData.examResult.results.length / 2), (col + 1) * Math.ceil(reportData.examResult.results.length / 2))
-                            .map((r, i) => (
-                              <tr key={i} className={!r.isCorrect ? 'bg-red-50' : ''}>
-                                <td className="border px-1 py-0 text-center">{r.questionNum}</td>
-                                <td className="border px-1 py-0 truncate" style={{maxWidth: '80px'}}>{r.type}</td>
-                                <td className="border px-1 py-0 text-center">{r.score}</td>
-                                <td className="border px-1 py-0 text-center">{r.correct}</td>
-                                <td className="border px-1 py-0 text-center">{r.isCorrect ? <span className="text-blue-600">○</span> : <span className="text-red-600 font-bold">✗</span>}</td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 퍼스널 진단 */}
-                <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-3">
-                  <h3 className="font-bold text-gray-800 mb-2 text-sm flex items-center gap-2">
-                    ✨ 오늘의 국어_퍼스널 진단
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white rounded-lg p-3 shadow-sm">
-                      <h4 className="font-semibold text-blue-700 mb-1 text-xs">학습 강점 및 분석</h4>
-                      <p className="text-xs text-gray-600 leading-relaxed">{strengthComment}</p>
-                    </div>
-                    <div className="bg-white rounded-lg p-3 shadow-sm border-l-4 border-orange-400">
-                      <h4 className="font-semibold text-orange-700 mb-1 text-xs">학습 약점 및 제언</h4>
-                      <p className="text-xs text-gray-600 leading-relaxed">{weaknessComment}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 학습 변화 (이전 시험이 있는 경우) */}
-                {reportData.previousExams.length > 0 && (
-                  <div className="border-t pt-3">
-                    <h3 className="font-semibold text-gray-700 mb-2 text-sm flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></span>
-                      학습 변화 추이
-                    </h3>
-                    
-                    {/* 간단한 점수 변화 표시 */}
-                    <div className="flex items-center gap-3 mb-2">
-                      {[...reportData.previousExams].reverse().slice(-3).map((prev, i) => (
-                        <div key={i} className="text-center">
-                          <div className="text-xs text-gray-500">{prev.date?.slice(5)}</div>
-                          <div className="text-sm font-bold text-gray-400">{prev.totalScore}</div>
-                        </div>
-                      ))}
-                      <div className="text-lg text-gray-300">→</div>
-                      <div className="text-center">
-                        <div className="text-xs text-blue-600 font-medium">현재</div>
-                        <div className="text-lg font-bold text-blue-600">{reportData.examResult.totalScore}</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-blue-50 rounded-lg p-2">
-                      <h4 className="font-semibold text-blue-700 mb-1 text-xs">📈 변화 분석</h4>
-                      <p className="text-xs text-gray-600">{changeComment}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 푸터 */}
-              <div className="bg-gray-100 px-4 py-2 text-center text-xs text-gray-500">
-                오늘의 국어 연구소 | {new Date().toLocaleDateString('ko-KR')} 생성
-              </div>
             </div>
           )}
         </div>

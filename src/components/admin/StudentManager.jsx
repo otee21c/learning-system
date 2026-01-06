@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-export default function StudentManager({ students, branch }) {
+export default function StudentManager({ students }) {
   const [newStudent, setNewStudent] = useState({ 
     name: '', 
     grade: '', 
@@ -264,7 +264,6 @@ export default function StudentManager({ students, branch }) {
         birthDate: newStudent.birthDate,
         id: newStudent.id,
         password: newStudent.password,
-        branch: branch, // 지점 정보 추가
         exams: []
       });
       

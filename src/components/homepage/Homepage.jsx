@@ -316,13 +316,7 @@ export default function Homepage() {
               <li><Link to="/news">입시 정보</Link></li>
               <li><Link to="/notice">공지 사항</Link></li>
               <li><Link to="/contact">문자 상담</Link></li>
-              <li className="hp-dropdown">
-                <span className="hp-highlight hp-dropdown-trigger">회원 전용 ▼</span>
-                <ul className="hp-dropdown-menu">
-                  <li><Link to="/lms">학생 로그인</Link></li>
-                  <li><Link to="/lms">관리자 로그인</Link></li>
-                </ul>
-              </li>
+              <li><Link to="/lms" className="hp-highlight">회원 전용</Link></li>
             </ul>
           </nav>
         </div>
@@ -563,7 +557,6 @@ export default function Homepage() {
           <p className="hp-footer-phone">대표전화: 02-562-5559</p>
           <div className="hp-footer-links">
             <Link to="/privacy">개인정보처리방침</Link>
-            <Link to="/parent-report">학습 보고서 확인</Link>
           </div>
           <p className="hp-footer-copyright">© 2024 오늘의 국어 연구소. All rights reserved.</p>
         </div>
