@@ -127,6 +127,8 @@ export default function WorkbookAnalysisManager({ students }) {
         reader.readAsDataURL(uploadedFile);
       });
 
+      console.log('PDF 변환 완료, API 호출 시작...');
+
       // API 호출
       const response = await fetch('/api/analyze-workbook', {
         method: 'POST',
@@ -138,20 +140,36 @@ export default function WorkbookAnalysisManager({ students }) {
         })
       });
 
-      if (!response.ok) {
-        throw new Error('AI 분석 요청 실패');
-      }
+      console.log('API 응답 상태:', response.status);
 
       const result = await response.json();
-      setAnalysisResult(result.questions);
-      setNewWorkbook(prev => ({
-        ...prev,
-        questions: result.questions
-      }));
-      setSuccess('AI 분석이 완료되었습니다. 결과를 확인하고 저장해주세요.');
+      console.log('API 응답 데이터:', result);
+
+      if (!response.ok) {
+        throw new Error(result.details || result.error || 'AI 분석 요청 실패');
+      }
+
+      // questions 데이터 확인
+      if (result.questions && Object.keys(result.questions).length > 0) {
+        // 빈 값 체크 - 모든 값이 비어있는지 확인
+        const hasValidData = Object.values(result.questions).some(q => q.type && q.type !== '');
+        
+        if (hasValidData) {
+          setAnalysisResult(result.questions);
+          setNewWorkbook(prev => ({
+            ...prev,
+            questions: result.questions
+          }));
+          setSuccess('AI 분석이 완료되었습니다. 결과를 확인하고 저장해주세요.');
+        } else {
+          throw new Error('AI가 유형을 분류하지 못했습니다.');
+        }
+      } else {
+        throw new Error('분석 결과가 비어있습니다.');
+      }
     } catch (err) {
       console.error('분석 오류:', err);
-      setError('AI 분석 중 오류가 발생했습니다. 수동으로 입력해주세요.');
+      setError(`AI 분석 중 오류: ${err.message}. 수동으로 입력해주세요.`);
       // 수동 입력을 위한 빈 questions 객체 생성
       const emptyQuestions = {};
       for (let i = 1; i <= newWorkbook.totalQuestions; i++) {
