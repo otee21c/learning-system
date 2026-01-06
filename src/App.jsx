@@ -301,13 +301,13 @@ export default function App() {
               {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} branch={selectedBranch} />}
               {activeTab === 'homework' && <HomeworkManager students={students} branch={selectedBranch} />}
               {activeTab === 'workbook-analysis' && <WorkbookAnalysisManager students={students} branch={selectedBranch} />}
-              {activeTab === 'question-manager' && <QuestionManager />}
+              {activeTab === 'question-manager' && <QuestionManager branch={selectedBranch} />}
               {activeTab === 'notification' && <NotificationManager students={students} branch={selectedBranch} />}
               {activeTab === 'curriculum' && <CurriculumManager students={students} branch={selectedBranch} />}
               {activeTab === 'attendance' && <AttendanceManager students={students} branch={selectedBranch} />}
               {activeTab === 'report' && <ReportGenerator students={students} branch={selectedBranch} />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
-              {activeTab === 'learning-materials' && <LearningMaterialManager />}
+              {activeTab === 'learning-materials' && <LearningMaterialManager branch={selectedBranch} />}
             </>
           )}
 
