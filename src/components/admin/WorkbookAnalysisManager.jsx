@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { BookOpen, Trash2, FileText, Plus, Save, X, AlertCircle, CheckCircle, BarChart3, Target, Calendar, User, Search, Loader2, Eye, FileDown, MapPin } from 'lucide-react';
+import { BookOpen, Trash2, FileText, Plus, Save, X, AlertCircle, CheckCircle, BarChart3, Target, Calendar, User, Search, Loader2, Eye, FileDown } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
 const TYPE_CATEGORIES = {
@@ -29,10 +29,7 @@ const TYPE_COLORS = {
 
 const SELECTION_START = 35;
 
-export default function WorkbookAnalysisManager({ students }) {
-  // 지점 선택 상태
-  const [selectedBranch, setSelectedBranch] = useState('gwangjin');
-  
+export default function WorkbookAnalysisManager({ students, selectedBranch }) {
   const [activeSubTab, setActiveSubTab] = useState('workbooks');
   const [workbooks, setWorkbooks] = useState([]);
   const [showAddWorkbook, setShowAddWorkbook] = useState(false);
@@ -66,6 +63,14 @@ export default function WorkbookAnalysisManager({ students }) {
   });
 
   useEffect(() => { loadWorkbooks(); loadWrongAnswerRecords(); }, [selectedBranch]);
+
+  // 지점 변경 시 선택 초기화
+  useEffect(() => {
+    setSelectedStudent(null);
+    setSelectedWorkbook(null);
+    setAnalysisStudent(null);
+    setAnalysisData(null);
+  }, [selectedBranch]);
 
   const loadWorkbooks = async () => {
     try {
@@ -284,15 +289,6 @@ export default function WorkbookAnalysisManager({ students }) {
 
   const handleGradeChange = (grade) => { setNewWorkbook(prev => ({ ...prev, grade, hasSelection: grade === '고3' })); };
 
-  // 지점 변경 시 선택 초기화
-  const handleBranchChange = (branch) => {
-    setSelectedBranch(branch);
-    setSelectedStudent(null);
-    setSelectedWorkbook(null);
-    setAnalysisStudent(null);
-    setAnalysisData(null);
-  };
-
   useEffect(() => {
     if (error || success) { const timer = setTimeout(() => { setError(''); setSuccess(''); }, 5000); return () => clearTimeout(timer); }
   }, [error, success]);
@@ -381,25 +377,16 @@ export default function WorkbookAnalysisManager({ students }) {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl"><BookOpen className="text-white" size={24} /></div>
-          <div><h2 className="text-2xl font-bold text-gray-800">교재 오답 분석</h2><p className="text-gray-500 text-sm">교재별 문제 유형 분석 및 학생 약점 진단</p></div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">교재 오답 분석</h2>
+            <p className="text-gray-500 text-sm">교재별 문제 유형 분석 및 학생 약점 진단</p>
+          </div>
         </div>
         
-        {/* 지점 선택 버튼 */}
-        <div className="flex items-center gap-2">
-          <MapPin size={20} className="text-gray-500" />
-          <button
-            onClick={() => handleBranchChange('gwangjin')}
-            className={'px-4 py-2 rounded-lg font-medium transition-all ' + (selectedBranch === 'gwangjin' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
-          >
-            광진
-          </button>
-          <button
-            onClick={() => handleBranchChange('baegot')}
-            className={'px-4 py-2 rounded-lg font-medium transition-all ' + (selectedBranch === 'baegot' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
-          >
-            배곧
-          </button>
-        </div>
+        {/* 현재 지점 표시 */}
+        <span className={'px-4 py-2 rounded-xl font-medium ' + (selectedBranch === 'gwangjin' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')}>
+          📍 {selectedBranch === 'gwangjin' ? '광진' : '배곧'}
+        </span>
       </div>
 
       {error && <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-red-700"><AlertCircle size={20} />{error}</div>}

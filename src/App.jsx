@@ -39,6 +39,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // 지점 선택 상태 (관리자용)
+  const [selectedBranch, setSelectedBranch] = useState('gwangjin');
 
   // 전역 데이터 (모든 컴포넌트에서 필요한 것만)
   const [students, setStudents] = useState([]);
@@ -154,13 +157,29 @@ export default function App() {
         {/* 헤더 */}
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                오늘의 국어 연구소
-              </h1>
-              <p className="text-gray-600 mt-1">
-                {currentUser.name}님, 환영합니다!
-              </p>
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                  오늘의 국어 연구소
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  {currentUser.name}님, 환영합니다!
+                </p>
+              </div>
+              
+              {/* 관리자용 지점 선택 버튼 */}
+              {currentUser.type === 'admin' && (
+                <button
+                  onClick={() => setSelectedBranch(selectedBranch === 'gwangjin' ? 'baegot' : 'gwangjin')}
+                  className={`ml-4 px-4 py-2 rounded-xl font-medium transition-all ${
+                    selectedBranch === 'gwangjin' 
+                      ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                      : 'bg-green-500 text-white hover:bg-green-600'
+                  }`}
+                >
+                  📍 {selectedBranch === 'gwangjin' ? '광진' : '배곧'}
+                </button>
+              )}
             </div>
             <div className="flex gap-3">
               <a
@@ -192,19 +211,19 @@ export default function App() {
           {/* 관리자 탭 */}
           {currentUser.type === 'admin' && (
             <>
-              {activeTab === 'dashboard' && <StudentDashboard students={students} />}
-              {activeTab === 'students' && <StudentManager students={students} />}
-              {activeTab === 'exams' && <ExamManager exams={exams} students={students} />}
+              {activeTab === 'dashboard' && <StudentDashboard students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'students' && <StudentManager students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'exams' && <ExamManager exams={exams} students={students} selectedBranch={selectedBranch} />}
               {activeTab === 'videos' && <VideoManager videos={videos} />}
-              {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} />}
-              {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} />}
-              {activeTab === 'homework' && <HomeworkManager students={students} />}
-              {activeTab === 'workbook-analysis' && <WorkbookAnalysisManager students={students} />}
+              {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} selectedBranch={selectedBranch} />}
+              {activeTab === 'homework' && <HomeworkManager students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'workbook-analysis' && <WorkbookAnalysisManager students={students} selectedBranch={selectedBranch} />}
               {activeTab === 'question-manager' && <QuestionManager />}
-              {activeTab === 'notification' && <NotificationManager students={students} />}
-              {activeTab === 'curriculum' && <CurriculumManager students={students} />}
-              {activeTab === 'attendance' && <AttendanceManager students={students} />}
-              {activeTab === 'report' && <ReportGenerator students={students} />}
+              {activeTab === 'notification' && <NotificationManager students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'curriculum' && <CurriculumManager students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'attendance' && <AttendanceManager students={students} selectedBranch={selectedBranch} />}
+              {activeTab === 'report' && <ReportGenerator students={students} selectedBranch={selectedBranch} />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
               {activeTab === 'learning-materials' && <LearningMaterialManager />}
             </>
