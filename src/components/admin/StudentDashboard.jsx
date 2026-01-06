@@ -4,27 +4,29 @@ import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
-  CheckCircle, XCircle, Clock, AlertCircle
+  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2, Download
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
-const StudentDashboard = ({ students = [] }) => {
+const StudentDashboard = ({ students = [], branch }) => {
   const todayMonthWeek = getTodayMonthWeek();
   
   // 필터 상태
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
   const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
   const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter, setGradeFilter] = useState(''); // 학년 필터
+  const [schoolFilter, setSchoolFilter] = useState(''); // 학교 필터
   
   // 데이터 상태
   const [attendanceData, setAttendanceData] = useState([]);
   const [curriculumData, setCurriculumData] = useState([]);
-  const [homeworkData, setHomeworkData] = useState([]);  // 제출 기록
-  const [assignmentsData, setAssignmentsData] = useState([]);  // 과제 목록
+  const [homeworkData, setHomeworkData] = useState([]);
+  const [assignmentsData, setAssignmentsData] = useState([]);
   const [memoData, setMemoData] = useState([]);
   
   // 편집 상태
-  const [editingCell, setEditingCell] = useState(null); // {studentId, field}
+  const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState('');
   
   // 확장된 행
@@ -32,6 +34,184 @@ const StudentDashboard = ({ students = [] }) => {
   
   // 로딩
   const [loading, setLoading] = useState(true);
+
+  // ★ 성적 입력 모달 상태
+  const [scoreModal, setScoreModal] = useState({
+    isOpen: false,
+    studentId: '',
+    studentName: '',
+    studentDocId: ''
+  });
+  const [scoreForm, setScoreForm] = useState({
+    examTitle: '',
+    totalScore: '',
+    percentage: '',
+    note: ''
+  });
+  const [savingScore, setSavingScore] = useState(false);
+
+  // ★ 문자 발송 관련 상태
+  const [selectedStudentsForSMS, setSelectedStudentsForSMS] = useState([]);
+  const [sendingSMS, setSendingSMS] = useState(false);
+
+  // ★ 학교 성적 관련 상태
+  const [schoolGradesData, setSchoolGradesData] = useState([]);
+  const [schoolGradeModal, setSchoolGradeModal] = useState({ isOpen: false, studentId: '', studentName: '' });
+  
+  // ★ 과제 제출물 모달 상태
+  const [submissionsModal, setSubmissionsModal] = useState({ isOpen: false, studentId: '', studentName: '' });
+  const [studentSubmissions, setStudentSubmissions] = useState([]);
+
+  // ★ SMS 발송 함수 (클라이언트에서 직접 Aligo 호출)
+  const sendSMS = async (phoneNumber, message) => {
+    try {
+      const apiKey = import.meta.env.VITE_ALIGO_API_KEY;
+      const userId = import.meta.env.VITE_ALIGO_USER_ID;
+      // 기본 발신번호: 02-562-5559
+      const sender = import.meta.env.VITE_ALIGO_SENDER_MAIN || '025625559';
+
+      if (!apiKey || !userId || !sender) {
+        console.error('❌ Aligo API 설정이 없습니다.');
+        return false;
+      }
+
+      const cleanPhone = phoneNumber.replace(/-/g, '');
+
+      const formData = new URLSearchParams();
+      formData.append('key', apiKey);
+      formData.append('user_id', userId);
+      formData.append('sender', sender);
+      formData.append('receiver', cleanPhone);
+      formData.append('msg', message);
+      formData.append('testmode_yn', 'N');
+
+      const response = await fetch('https://apis.aligo.in/send/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString()
+      });
+
+      const result = await response.json();
+      
+      if (result.result_code === '1') {
+        console.log('✅ SMS 발송 성공:', cleanPhone);
+        return true;
+      } else {
+        console.error('❌ SMS 발송 실패:', result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('SMS 발송 오류:', error);
+      return false;
+    }
+  };
+
+  // ★ 개별 지각/결석 문자 발송 (학부모 + 학생)
+  const sendAttendanceSMS = async (student, status) => {
+    if (!student.parentPhone && !student.phone) {
+      alert(`${student.name} 학생의 연락처가 없습니다.`);
+      return;
+    }
+
+    const statusText = status === '지각' ? '아직 등원하지 않아서' : '결석하여';
+    const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.\n(학원 연락은 010-6600-5979로 편하게 해주세요.)`;
+
+    setSendingSMS(true);
+    let sentTo = [];
+    
+    // 학부모에게 발송
+    if (student.parentPhone) {
+      const parentSuccess = await sendSMS(student.parentPhone, message);
+      if (parentSuccess) sentTo.push('학부모');
+    }
+    
+    // 학생에게도 발송
+    if (student.phone) {
+      const studentSuccess = await sendSMS(student.phone, message);
+      if (studentSuccess) sentTo.push('학생');
+    }
+    
+    setSendingSMS(false);
+
+    if (sentTo.length > 0) {
+      alert(`${student.name} - ${sentTo.join(', ')}에게 문자가 발송되었습니다.`);
+    } else {
+      alert('문자 발송에 실패했습니다.');
+    }
+  };
+
+  // ★ 일괄 문자 발송 (결석/지각) - 학부모 + 학생
+  const sendBulkAttendanceSMS = async () => {
+    if (selectedStudentsForSMS.length === 0) {
+      alert('문자를 보낼 학생을 선택해주세요.');
+      return;
+    }
+
+    const studentsToSend = selectedStudentsForSMS
+      .map(id => students.find(s => s.id === id))
+      .filter(s => s && (s.parentPhone || s.phone));
+
+    if (studentsToSend.length === 0) {
+      alert('연락처가 등록된 학생이 없습니다.');
+      return;
+    }
+
+    if (!confirm(`${studentsToSend.length}명의 학생/학부모님께 문자를 발송하시겠습니까?`)) {
+      return;
+    }
+
+    setSendingSMS(true);
+    let totalSent = 0;
+
+    for (const student of studentsToSend) {
+      const status = getAttendanceStatus(student.id);
+      const statusText = status === '지각' ? '아직 등원하지 않아서' : status === '결석' ? '결석하여' : '출결 관련으로';
+      const message = `안녕하세요. 오늘의 국어입니다. ${student.name} 학생이 ${statusText} 문자 보냅니다. 일정 확인 부탁드립니다. 고맙습니다.\n(학원 연락은 010-6600-5979로 편하게 해주세요.)`;
+
+      // 학부모에게 발송
+      if (student.parentPhone) {
+        const success = await sendSMS(student.parentPhone, message);
+        if (success) totalSent++;
+      }
+      
+      // 학생에게도 발송
+      if (student.phone) {
+        const success = await sendSMS(student.phone, message);
+        if (success) totalSent++;
+      }
+    }
+
+    setSendingSMS(false);
+    setSelectedStudentsForSMS([]);
+    alert(`총 ${totalSent}건의 문자가 발송되었습니다. (학생 + 학부모)`);
+  };
+
+  // ★ 학생 선택 토글 (문자용)
+  const toggleStudentForSMS = (studentId) => {
+    setSelectedStudentsForSMS(prev => 
+      prev.includes(studentId) 
+        ? prev.filter(id => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  // ★ 전체 선택/해제 (결석/지각 학생만)
+  const toggleSelectAllAbsent = () => {
+    const absentStudents = filteredStudents.filter(s => {
+      const status = getAttendanceStatus(s.id);
+      return status === '결석' || status === '지각';
+    });
+
+    const allSelected = absentStudents.every(s => selectedStudentsForSMS.includes(s.id));
+    
+    if (allSelected) {
+      setSelectedStudentsForSMS(prev => prev.filter(id => !absentStudents.some(s => s.id === id)));
+    } else {
+      setSelectedStudentsForSMS(prev => [...new Set([...prev, ...absentStudents.map(s => s.id)])]);
+    }
+  };
 
   // 데이터 로드
   useEffect(() => {
@@ -41,25 +221,24 @@ const StudentDashboard = ({ students = [] }) => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // 출결 데이터
       const attendanceSnapshot = await getDocs(collection(db, 'attendance'));
       setAttendanceData(attendanceSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
-      // 커리큘럼 데이터
       const curriculumSnapshot = await getDocs(collection(db, 'curriculums'));
       setCurriculumData(curriculumSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
-      // 과제 목록
       const assignmentsSnapshot = await getDocs(query(collection(db, 'assignments'), orderBy('createdAt', 'desc')));
       setAssignmentsData(assignmentsSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
-      // 숙제 제출 데이터
       const homeworkSnapshot = await getDocs(collection(db, 'homeworkSubmissions'));
       setHomeworkData(homeworkSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
-      // 메모 데이터
       const memoSnapshot = await getDocs(collection(db, 'studentMemos'));
       setMemoData(memoSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
+
+      // 학교 성적 로드
+      const schoolGradesSnapshot = await getDocs(collection(db, 'schoolGrades'));
+      setSchoolGradesData(schoolGradesSnapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() })));
 
     } catch (error) {
       console.error('데이터 로드 실패:', error);
@@ -77,55 +256,155 @@ const StudentDashboard = ({ students = [] }) => {
     return record?.status || '-';
   };
 
-  // 학생별 커리큘럼 가져오기 (수정됨!)
+  // 학생별 커리큘럼 가져오기
   const getCurriculum = (studentId) => {
-    // 커리큘럼의 students 배열에 해당 학생이 포함되어 있는지 확인
     const record = curriculumData.find(c => 
       c.students?.includes(studentId) && 
       c.month === selectedMonth && 
-      c.weekNumber === selectedWeek  // weekNumber 필드 사용
+      c.weekNumber === selectedWeek
     );
-    return record ? true : false;  // 있으면 true, 없으면 false
+    return record ? true : false;
+  };
+
+  // 학생별 학교 성적 가져오기
+  const getSchoolGrades = (studentId) => {
+    return schoolGradesData
+      .filter(g => g.studentId === studentId)
+      .sort((a, b) => {
+        if (b.year !== a.year) return b.year - a.year;
+        return b.semester - a.semester;
+      });
+  };
+
+  // 학생별 모든 과제 제출물 가져오기
+  const getStudentAllSubmissions = (studentId) => {
+    return homeworkData
+      .filter(h => h.studentId === studentId && (h.files?.length > 0 || h.imageUrl))
+      .sort((a, b) => {
+        const dateA = a.submittedAt?.seconds || 0;
+        const dateB = b.submittedAt?.seconds || 0;
+        return dateB - dateA;
+      });
+  };
+
+  // 과제 제출물 모달 열기
+  const openSubmissionsModal = (student) => {
+    const submissions = getStudentAllSubmissions(student.id);
+    setStudentSubmissions(submissions);
+    setSubmissionsModal({ isOpen: true, studentId: student.id, studentName: student.name });
+  };
+
+  // 과제 제출물 삭제
+  const handleDeleteSubmission = async (submissionDocId) => {
+    if (!confirm('이 제출물을 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteDoc(doc(db, 'homeworkSubmissions', submissionDocId));
+      
+      // 로컬 상태 업데이트
+      setHomeworkData(prev => prev.filter(h => h.docId !== submissionDocId));
+      setStudentSubmissions(prev => prev.filter(s => s.docId !== submissionDocId));
+      
+      alert('삭제되었습니다.');
+    } catch (error) {
+      console.error('제출물 삭제 실패:', error);
+      alert('삭제에 실패했습니다.');
+    }
   };
 
   // 학생별 숙제 현황 가져오기
   const getHomeworkStatus = (studentId) => {
-    // 해당 월/주차의 숙제 제출 현황
     const submissions = homeworkData.filter(h => 
       h.studentId === studentId && 
       h.month === selectedMonth && 
       h.week === selectedWeek
     );
     
-    // 개별확인완료 수
-    const manualComplete = submissions.filter(s => s.manualStatus === '개별확인완료').length;
-    // 개별확인예정 수
-    const manualPending = submissions.filter(s => s.manualStatus === '개별확인예정').length;
-    // 실제 제출 수
-    const submitted = submissions.filter(s => s.submitted || s.imageUrl || s.files).length;
+    // 과제 코드 수집
+    const taskCodes = submissions
+      .filter(s => s.taskCode)
+      .map(s => s.taskCode)
+      .sort();
     
-    // 총 완료 수 (제출 + 개별확인완료)
+    const manualComplete = submissions.filter(s => s.manualStatus === '개별확인완료').length;
+    const manualPending = submissions.filter(s => s.manualStatus === '개별확인예정').length;
+    const submitted = submissions.filter(s => s.submitted || s.imageUrl || s.files).length;
     const totalComplete = submitted + manualComplete;
     
-    if (manualPending > 0) return { text: `확인예정 ${manualPending}`, type: 'pending' };
-    if (totalComplete > 0) return { text: `${totalComplete}개 완료`, type: 'complete' };
-    return { text: '미제출', type: 'none' };
+    // 과제 코드가 있으면 코드로 표시
+    if (taskCodes.length > 0) {
+      return { text: taskCodes.join(', '), type: 'complete', codes: taskCodes };
+    }
+    if (manualPending > 0) return { text: `확인예정 ${manualPending}`, type: 'pending', codes: [] };
+    if (totalComplete > 0) return { text: `${totalComplete}개 완료`, type: 'complete', codes: [] };
+    return { text: '미제출', type: 'none', codes: [] };
   };
 
-  // 학생별 성적 가져오기 (수정됨! - students prop에서 가져옴)
+  // 과제 코드 저장
+  const handleTaskCodeChange = async (studentId, taskCode) => {
+    if (!taskCode) return;
+    
+    try {
+      // 기존 해당 월/주차 데이터 확인
+      const existing = homeworkData.find(h => 
+        h.studentId === studentId && 
+        h.month === selectedMonth && 
+        h.week === selectedWeek &&
+        h.taskCode === taskCode
+      );
+      
+      if (existing) {
+        // 이미 있으면 삭제 (토글)
+        await deleteDoc(doc(db, 'homeworkSubmissions', existing.docId));
+        setHomeworkData(prev => prev.filter(h => h.docId !== existing.docId));
+      } else {
+        // 없으면 추가
+        const student = students.find(s => s.id === studentId);
+        const newSubmission = {
+          studentId,
+          studentName: student?.name || '',
+          month: selectedMonth,
+          week: selectedWeek,
+          taskCode,
+          submitted: true,
+          submittedAt: serverTimestamp(),
+          branch: branch || ''
+        };
+        
+        const docRef = await addDoc(collection(db, 'homeworkSubmissions'), newSubmission);
+        setHomeworkData(prev => [...prev, { docId: docRef.id, ...newSubmission }]);
+      }
+    } catch (error) {
+      console.error('과제 코드 저장 실패:', error);
+      alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 특정 과제 코드 체크 여부
+  const hasTaskCode = (studentId, taskCode) => {
+    return homeworkData.some(h => 
+      h.studentId === studentId && 
+      h.month === selectedMonth && 
+      h.week === selectedWeek &&
+      h.taskCode === taskCode
+    );
+  };
+
+  // 학생별 성적 가져오기 (해당 월/주차)
   const getRecentScore = (studentId) => {
     const student = students.find(s => s.id === studentId);
     if (!student?.exams || student.exams.length === 0) return '-';
     
-    // 해당 월/주차의 시험 결과 필터링
     const monthWeekExams = student.exams.filter(e => 
       e.month === selectedMonth && e.week === selectedWeek
     );
     
     if (monthWeekExams.length > 0) {
-      // 가장 최근 시험
       const latestExam = monthWeekExams[monthWeekExams.length - 1];
-      return `${latestExam.totalScore || latestExam.score || 0}점`;
+      if (latestExam.note && !latestExam.totalScore) {
+        return latestExam.note;
+      }
+      return `${latestExam.totalScore || 0}점`;
     }
     
     return '-';
@@ -189,12 +468,11 @@ const StudentDashboard = ({ students = [] }) => {
     }
   };
 
-  // 과제 수동 상태 변경 (새로 추가!)
+  // 과제 수동 상태 변경
   const handleHomeworkStatusChange = async (studentId, newStatus) => {
     try {
       const student = students.find(s => s.id === studentId);
       
-      // 해당 월/주차의 기존 제출 기록 찾기
       const existing = homeworkData.find(h => 
         h.studentId === studentId && 
         h.month === selectedMonth && 
@@ -202,13 +480,11 @@ const StudentDashboard = ({ students = [] }) => {
       );
 
       if (existing) {
-        // 기존 기록 업데이트
         await updateDoc(doc(db, 'homeworkSubmissions', existing.docId), {
           manualStatus: newStatus,
           updatedAt: serverTimestamp()
         });
       } else {
-        // 새 기록 생성
         await addDoc(collection(db, 'homeworkSubmissions'), {
           studentId: studentId,
           studentName: student?.name || '',
@@ -278,6 +554,93 @@ const StudentDashboard = ({ students = [] }) => {
     }
   };
 
+  // ★ 성적 입력 모달 열기
+  const openScoreModal = (student) => {
+    setScoreModal({
+      isOpen: true,
+      studentId: student.id,
+      studentName: student.name,
+      studentDocId: student.docId
+    });
+    setScoreForm({
+      examTitle: '',
+      totalScore: '',
+      percentage: '',
+      note: ''
+    });
+  };
+
+  // ★ 성적 입력 모달 닫기
+  const closeScoreModal = () => {
+    setScoreModal({
+      isOpen: false,
+      studentId: '',
+      studentName: '',
+      studentDocId: ''
+    });
+    setScoreForm({
+      examTitle: '',
+      totalScore: '',
+      percentage: '',
+      note: ''
+    });
+  };
+
+  // ★ 성적 저장
+  const handleScoreSave = async () => {
+    if (!scoreForm.examTitle) {
+      alert('시험명을 입력해주세요.');
+      return;
+    }
+    
+    if (!scoreForm.totalScore && !scoreForm.note) {
+      alert('점수 또는 비고를 입력해주세요.');
+      return;
+    }
+
+    setSavingScore(true);
+    
+    try {
+      const student = students.find(s => s.id === scoreModal.studentId);
+      if (!student) {
+        alert('학생 정보를 찾을 수 없습니다.');
+        setSavingScore(false);
+        return;
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      
+      const newExam = {
+        examTitle: scoreForm.examTitle,
+        totalScore: scoreForm.totalScore ? parseInt(scoreForm.totalScore) : null,
+        percentage: scoreForm.percentage || null,
+        note: scoreForm.note || '',
+        date: today,
+        month: selectedMonth,
+        week: selectedWeek,
+        manualEntry: true,
+        createdAt: new Date().toISOString()
+      };
+
+      const updatedExams = [...(student.exams || []), newExam];
+
+      const docId = scoreModal.studentDocId || student.docId;
+      await updateDoc(doc(db, 'students', docId), {
+        exams: updatedExams
+      });
+
+      alert('성적이 저장되었습니다.');
+      closeScoreModal();
+      window.location.reload();
+      
+    } catch (error) {
+      console.error('성적 저장 실패:', error);
+      alert('성적 저장에 실패했습니다: ' + error.message);
+    }
+    
+    setSavingScore(false);
+  };
+
   // 행 확장 토글
   const toggleRow = (studentId) => {
     setExpandedRows(prev => ({
@@ -287,11 +650,27 @@ const StudentDashboard = ({ students = [] }) => {
   };
 
   // 검색 필터링된 학생 목록
-  const filteredStudents = students.filter(student => 
-    student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.school?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.grade?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(student => {
+    // 검색어 필터
+    const matchesSearch = searchTerm === '' || 
+      student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.school?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.grade?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    // 학년 필터
+    const matchesGrade = gradeFilter === '' || student.grade === gradeFilter;
+    
+    // 학교 필터
+    const matchesSchool = schoolFilter === '' || student.school === schoolFilter;
+    
+    return matchesSearch && matchesGrade && matchesSchool;
+  });
+
+  // 학년 목록 추출 (중복 제거, 정렬)
+  const gradeList = [...new Set(students.map(s => s.grade).filter(Boolean))].sort();
+  
+  // 학교 목록 추출 (중복 제거, 정렬)
+  const schoolList = [...new Set(students.map(s => s.school).filter(Boolean))].sort();
 
   // 셀 편집 시작
   const startEdit = (studentId, field, currentValue) => {
@@ -341,7 +720,6 @@ const StudentDashboard = ({ students = [] }) => {
 
         {/* 필터 영역 */}
         <div className="flex flex-wrap gap-4 items-center">
-          {/* 월 선택 */}
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-gray-500" />
             <select
@@ -355,7 +733,6 @@ const StudentDashboard = ({ students = [] }) => {
             </select>
           </div>
 
-          {/* 주차 선택 */}
           <div className="flex items-center gap-2">
             <select
               value={selectedWeek}
@@ -368,7 +745,34 @@ const StudentDashboard = ({ students = [] }) => {
             </select>
           </div>
 
-          {/* 검색 */}
+          {/* 학년 필터 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={gradeFilter}
+              onChange={(e) => setGradeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">전체 학년</option>
+              {gradeList.map(grade => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 학교 필터 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={schoolFilter}
+              onChange={(e) => setSchoolFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">전체 학교</option>
+              {schoolList.map(school => (
+                <option key={school} value={school}>{school}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex items-center gap-2 flex-1 max-w-xs">
             <div className="relative flex-1">
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -382,7 +786,6 @@ const StudentDashboard = ({ students = [] }) => {
             </div>
           </div>
 
-          {/* 새로고침 */}
           <button
             onClick={loadAllData}
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
@@ -425,6 +828,12 @@ const StudentDashboard = ({ students = [] }) => {
                 </th>
                 <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-24">
                   <div className="flex items-center justify-center gap-2">
+                    <Image size={16} />
+                    제출물
+                  </div>
+                </th>
+                <th className="px-4 py-4 text-center text-sm font-semibold text-gray-700 w-32">
+                  <div className="flex items-center justify-center gap-2">
                     <FileText size={16} />
                     성적
                   </div>
@@ -443,7 +852,7 @@ const StudentDashboard = ({ students = [] }) => {
             <tbody>
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-gray-500">
                     {searchTerm ? '검색 결과가 없습니다.' : '등록된 학생이 없습니다.'}
                   </td>
                 </tr>
@@ -460,9 +869,7 @@ const StudentDashboard = ({ students = [] }) => {
 
                   return (
                     <React.Fragment key={student.id}>
-                      {/* 메인 행 */}
                       <tr className={`border-b border-gray-100 hover:bg-gray-50 transition ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                        {/* 확장 버튼 */}
                         <td className="px-4 py-3">
                           <button
                             onClick={() => toggleRow(student.id)}
@@ -472,7 +879,6 @@ const StudentDashboard = ({ students = [] }) => {
                           </button>
                         </td>
 
-                        {/* 학생 정보 */}
                         <td className="px-4 py-3">
                           <div>
                             <p className="font-medium text-gray-900">{student.name}</p>
@@ -480,30 +886,50 @@ const StudentDashboard = ({ students = [] }) => {
                           </div>
                         </td>
 
-                        {/* 출결 */}
                         <td className="px-4 py-3 text-center">
-                          <div className="relative inline-block">
-                            <select
-                              value={attendanceStatus}
-                              onChange={(e) => handleAttendanceChange(student.id, e.target.value)}
-                              className={`appearance-none px-3 py-1 rounded-full text-sm font-medium cursor-pointer border-0 focus:ring-2 focus:ring-indigo-500 ${
-                                attendanceStatus === '출석' ? 'bg-green-100 text-green-700' :
-                                attendanceStatus === '지각' ? 'bg-yellow-100 text-yellow-700' :
-                                attendanceStatus === '결석' ? 'bg-red-100 text-red-700' :
-                                attendanceStatus === '조퇴' ? 'bg-orange-100 text-orange-700' :
-                                'bg-gray-100 text-gray-500'
-                              }`}
-                            >
-                              <option value="-">-</option>
-                              <option value="출석">출석</option>
-                              <option value="지각">지각</option>
-                              <option value="결석">결석</option>
-                              <option value="조퇴">조퇴</option>
-                            </select>
+                          <div className="flex items-center justify-center gap-2">
+                            {/* 문자 발송용 체크박스 (결석/지각만) */}
+                            {(attendanceStatus === '결석' || attendanceStatus === '지각') && (
+                              <input
+                                type="checkbox"
+                                checked={selectedStudentsForSMS.includes(student.id)}
+                                onChange={() => toggleStudentForSMS(student.id)}
+                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            )}
+                            <div className="relative inline-block">
+                              <select
+                                value={attendanceStatus}
+                                onChange={(e) => handleAttendanceChange(student.id, e.target.value)}
+                                className={`appearance-none px-3 py-1 rounded-full text-sm font-medium cursor-pointer border-0 focus:ring-2 focus:ring-indigo-500 ${
+                                  attendanceStatus === '출석' ? 'bg-green-100 text-green-700' :
+                                  attendanceStatus === '지각' ? 'bg-yellow-100 text-yellow-700' :
+                                  attendanceStatus === '결석' ? 'bg-red-100 text-red-700' :
+                                  attendanceStatus === '조퇴' ? 'bg-orange-100 text-orange-700' :
+                                  'bg-gray-100 text-gray-500'
+                                }`}
+                              >
+                                <option value="-">-</option>
+                                <option value="출석">출석</option>
+                                <option value="지각">지각</option>
+                                <option value="결석">결석</option>
+                                <option value="조퇴">조퇴</option>
+                              </select>
+                            </div>
+                            {/* 개별 문자 발송 버튼 */}
+                            {(attendanceStatus === '결석' || attendanceStatus === '지각') && (
+                              <button
+                                onClick={() => sendAttendanceSMS(student, attendanceStatus)}
+                                disabled={sendingSMS}
+                                className="p-1 text-blue-500 hover:bg-blue-100 rounded transition disabled:opacity-50"
+                                title="문자 발송"
+                              >
+                                <Send size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
 
-                        {/* 커리큘럼 */}
                         <td className="px-4 py-3 text-center">
                           {curriculum ? (
                             <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 font-bold">
@@ -516,63 +942,111 @@ const StudentDashboard = ({ students = [] }) => {
                           )}
                         </td>
 
-                        {/* 과제 (수동 변경 가능!) */}
                         <td className="px-4 py-3 text-center">
-                          <select
-                            value={homeworkManualStatus}
-                            onChange={(e) => handleHomeworkStatusChange(student.id, e.target.value)}
-                            className={`px-2 py-1 rounded-lg text-xs font-medium cursor-pointer border focus:ring-2 focus:ring-indigo-500 ${
-                              homeworkStatus.type === 'complete' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                              homeworkStatus.type === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
-                              'bg-red-50 text-red-700 border-red-200'
-                            }`}
+                          <div className="flex flex-col gap-1">
+                            {/* 과제 코드 체크박스 그리드 */}
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {['1', '2', '3', '4', '5'].map(code => (
+                                <button
+                                  key={code}
+                                  onClick={() => handleTaskCodeChange(student.id, code)}
+                                  className={`w-6 h-6 rounded text-xs font-bold transition ${
+                                    hasTaskCode(student.id, code)
+                                      ? 'bg-blue-500 text-white'
+                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                  }`}
+                                  title={`과제 ${code}`}
+                                >
+                                  {code}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex flex-wrap gap-1 justify-center">
+                              {['a', 'b', 'c', 'd', 'e'].map(code => (
+                                <button
+                                  key={code}
+                                  onClick={() => handleTaskCodeChange(student.id, code)}
+                                  className={`w-6 h-6 rounded text-xs font-bold transition ${
+                                    hasTaskCode(student.id, code)
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                  }`}
+                                  title={`과제 ${code}`}
+                                >
+                                  {code}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* ★ 제출물 - 학생별 모든 과제 사진 보기 */}
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => openSubmissionsModal(student)}
+                            className="px-2 py-1 bg-purple-100 text-purple-600 rounded-lg text-xs font-medium hover:bg-purple-200 transition flex items-center gap-1 mx-auto"
                           >
-                            <option value="">
-                              {homeworkStatus.text}
-                            </option>
-                            <option value="개별확인예정">📋 개별확인 예정</option>
-                            <option value="개별확인완료">✔️ 개별확인 완료</option>
-                          </select>
+                            <Image size={14} />
+                            {getStudentAllSubmissions(student.id).length}개
+                          </button>
                         </td>
 
-                        {/* 성적 */}
+                        {/* ★ 성적 - 클릭하면 입력 모달 열림 */}
                         <td className="px-4 py-3 text-center">
-                          <span className={`text-sm font-medium ${recentScore === '-' ? 'text-gray-400' : 'text-indigo-600'}`}>
-                            {recentScore}
-                          </span>
+                          <button
+                            onClick={() => openScoreModal(student)}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition hover:shadow-md ${
+                              recentScore === '-' 
+                                ? 'bg-gray-100 text-gray-400 hover:bg-indigo-100 hover:text-indigo-600' 
+                                : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
+                            }`}
+                            title="클릭하여 성적 입력"
+                          >
+                            <div className="flex items-center gap-1">
+                              {recentScore === '-' ? (
+                                <>
+                                  <Plus size={14} />
+                                  <span>입력</span>
+                                </>
+                              ) : (
+                                <span>{recentScore}</span>
+                              )}
+                            </div>
+                          </button>
                         </td>
 
-                        {/* 메모 */}
                         <td className="px-4 py-3">
                           {isEditingMemo ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
+                            <div className="flex flex-col gap-2">
+                              <textarea
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
-                                className="flex-1 px-2 py-1 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm"
+                                className="w-full px-2 py-1 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+                                rows={3}
                                 autoFocus
+                                placeholder="메모 입력 (Enter로 줄바꿈)"
                                 onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleMemoSave(student.id, editValue);
                                   if (e.key === 'Escape') cancelEdit();
                                 }}
                               />
-                              <button
-                                onClick={() => handleMemoSave(student.id, editValue)}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded"
-                              >
-                                <Save size={16} />
-                              </button>
-                              <button
-                                onClick={cancelEdit}
-                                className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                              >
-                                <X size={16} />
-                              </button>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => handleMemoSave(student.id, editValue)}
+                                  className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                                >
+                                  저장
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm hover:bg-gray-400"
+                                >
+                                  취소
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div 
-                              className="text-sm text-gray-600 truncate max-w-xs cursor-pointer hover:text-indigo-600"
+                              className="text-sm text-gray-600 max-w-xs cursor-pointer hover:text-indigo-600 whitespace-pre-wrap"
                               onClick={() => startEdit(student.id, 'memo', memo)}
                               title={memo || '클릭하여 메모 추가'}
                             >
@@ -581,7 +1055,6 @@ const StudentDashboard = ({ students = [] }) => {
                           )}
                         </td>
 
-                        {/* 관리 버튼 */}
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
@@ -604,19 +1077,16 @@ const StudentDashboard = ({ students = [] }) => {
                         </td>
                       </tr>
 
-                      {/* 확장 행 - 상세 정보 */}
                       {isExpanded && (
                         <tr className="bg-indigo-50/50">
-                          <td colSpan={8} className="px-6 py-4">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              {/* 연락처 정보 */}
+                          <td colSpan={9} className="px-6 py-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                               <div className="bg-white rounded-lg p-4 shadow-sm">
                                 <h4 className="font-medium text-gray-700 mb-2">📞 연락처</h4>
                                 <p className="text-sm text-gray-600">학생: {student.phone || '-'}</p>
                                 <p className="text-sm text-gray-600">학부모: {student.parentPhone || '-'}</p>
                               </div>
 
-                              {/* 이번 달 출결 이력 */}
                               <div className="bg-white rounded-lg p-4 shadow-sm">
                                 <h4 className="font-medium text-gray-700 mb-2">📅 {selectedMonth}월 출결</h4>
                                 <div className="flex gap-2">
@@ -636,7 +1106,6 @@ const StudentDashboard = ({ students = [] }) => {
                                 </div>
                               </div>
 
-                              {/* 최근 메모 이력 */}
                               <div className="bg-white rounded-lg p-4 shadow-sm">
                                 <h4 className="font-medium text-gray-700 mb-2">📝 최근 메모</h4>
                                 <div className="space-y-1 max-h-20 overflow-y-auto">
@@ -655,6 +1124,24 @@ const StudentDashboard = ({ students = [] }) => {
                                   )}
                                 </div>
                               </div>
+
+                              {/* 학교 성적 */}
+                              <div className="bg-white rounded-lg p-4 shadow-sm">
+                                <h4 className="font-medium text-gray-700 mb-2">📊 학교 성적</h4>
+                                <div className="space-y-1 max-h-20 overflow-y-auto">
+                                  {getSchoolGrades(student.id).slice(0, 3).map((g, idx) => (
+                                    <p key={idx} className="text-xs text-gray-600">
+                                      <span className="text-gray-400">{g.year} {g.semester}학기 {g.examType}:</span>{' '}
+                                      {g.score && `${g.score}점`}
+                                      {g.grade && ` ${g.grade}등급`}
+                                      {g.rank && g.totalStudents && ` (${g.rank}/${g.totalStudents})`}
+                                    </p>
+                                  ))}
+                                  {getSchoolGrades(student.id).length === 0 && (
+                                    <p className="text-xs text-gray-400">등록된 성적 없음</p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -667,33 +1154,54 @@ const StudentDashboard = ({ students = [] }) => {
           </table>
         </div>
 
-        {/* 푸터 - 요약 */}
         <div className="bg-gray-50 px-6 py-4 border-t">
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-500">전체 학생:</span>
-              <span className="font-semibold text-gray-700">{filteredStudents.length}명</span>
+          <div className="flex flex-wrap gap-6 text-sm items-center justify-between">
+            <div className="flex flex-wrap gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">전체 학생:</span>
+                <span className="font-semibold text-gray-700">{filteredStudents.length}명</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle className="text-green-500" size={16} />
+                <span className="text-gray-500">출석:</span>
+                <span className="font-semibold text-green-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '출석').length}명
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <XCircle className="text-red-500" size={16} />
+                <span className="text-gray-500">결석:</span>
+                <span className="font-semibold text-red-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '결석').length}명
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="text-yellow-500" size={16} />
+                <span className="text-gray-500">지각:</span>
+                <span className="font-semibold text-yellow-600">
+                  {filteredStudents.filter(s => getAttendanceStatus(s.id) === '지각').length}명
+                </span>
+              </div>
             </div>
+            
+            {/* 문자 발송 버튼 영역 */}
             <div className="flex items-center gap-2">
-              <CheckCircle className="text-green-500" size={16} />
-              <span className="text-gray-500">출석:</span>
-              <span className="font-semibold text-green-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '출석').length}명
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <XCircle className="text-red-500" size={16} />
-              <span className="text-gray-500">결석:</span>
-              <span className="font-semibold text-red-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '결석').length}명
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="text-yellow-500" size={16} />
-              <span className="text-gray-500">지각:</span>
-              <span className="font-semibold text-yellow-600">
-                {filteredStudents.filter(s => getAttendanceStatus(s.id) === '지각').length}명
-              </span>
+              <button
+                onClick={toggleSelectAllAbsent}
+                className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+              >
+                결석/지각 전체 선택
+              </button>
+              {selectedStudentsForSMS.length > 0 && (
+                <button
+                  onClick={sendBulkAttendanceSMS}
+                  disabled={sendingSMS}
+                  className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Send size={14} />
+                  {sendingSMS ? '발송 중...' : `선택 ${selectedStudentsForSMS.length}명 문자 발송`}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -706,11 +1214,247 @@ const StudentDashboard = ({ students = [] }) => {
           <li>• <strong>출결</strong>: 드롭다운을 클릭해서 바로 변경 → 출석 관리에도 반영됨</li>
           <li>• <strong>과제</strong>: 드롭다운으로 "개별확인 예정/완료" 선택 가능 → 숙제 관리에도 반영됨</li>
           <li>• <strong>커리</strong>: 커리큘럼 배정 여부 (O: 배정됨, X: 미배정) - 상세 내용은 커리큘럼 탭에서 확인</li>
-          <li>• <strong>성적</strong>: 성적 통계 탭의 해당 월/주차 점수 표시</li>
+          <li>• <strong className="text-indigo-600">성적</strong>: 버튼을 클릭하여 시험명/점수/비고 입력 → 성적 통계 탭에도 반영됨</li>
           <li>• <strong>메모</strong>: 셀을 클릭하거나 ✏️ 버튼으로 편집 → 학생 관리에도 반영됨</li>
           <li>• <strong>▼ 버튼</strong>: 클릭하면 학생 상세 정보 확인</li>
         </ul>
       </div>
+
+      {/* ★ 성적 입력 모달 */}
+      {scoreModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold mb-2 text-gray-800">
+              📝 성적 입력
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              <span className="font-semibold text-indigo-600">{scoreModal.studentName}</span> 학생 · {selectedMonth}월 {selectedWeek}주차
+            </p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  시험명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={scoreForm.examTitle}
+                  onChange={(e) => setScoreForm({ ...scoreForm, examTitle: e.target.value })}
+                  placeholder="예: 복습 test, 중간고사"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    점수
+                  </label>
+                  <input
+                    type="number"
+                    value={scoreForm.totalScore}
+                    onChange={(e) => setScoreForm({ ...scoreForm, totalScore: e.target.value })}
+                    placeholder="예: 85"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    정답률 (%)
+                  </label>
+                  <input
+                    type="text"
+                    value={scoreForm.percentage}
+                    onChange={(e) => setScoreForm({ ...scoreForm, percentage: e.target.value })}
+                    placeholder="예: 85"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  비고
+                </label>
+                <input
+                  type="text"
+                  value={scoreForm.note}
+                  onChange={(e) => setScoreForm({ ...scoreForm, note: e.target.value })}
+                  placeholder="예: 결석, 조퇴, 재시험 필요"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+
+              <p className="text-xs text-gray-400">
+                💡 점수 없이 비고만 입력할 수도 있어요 (예: 결석)
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeScoreModal}
+                className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleScoreSave}
+                disabled={savingScore}
+                className="flex-1 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-medium hover:shadow-lg transition disabled:opacity-50"
+              >
+                {savingScore ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 과제 제출물 모달 */}
+      {submissionsModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">
+                📷 {submissionsModal.studentName} - 과제 제출물
+              </h3>
+              <button
+                onClick={() => setSubmissionsModal({ isOpen: false, studentId: '', studentName: '' })}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              {studentSubmissions.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Image size={48} className="mx-auto mb-4 opacity-50" />
+                  <p>제출된 과제가 없습니다.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {studentSubmissions.map((sub, idx) => {
+                    const assignment = assignmentsData.find(a => a.id === sub.homeworkId || a.docId === sub.homeworkId);
+                    return (
+                      <div key={idx} className="border rounded-xl p-4 bg-gray-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-semibold text-gray-800">
+                              {assignment?.title || sub.homeworkId || '과제'}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              제출: {sub.submittedAt?.seconds 
+                                ? new Date(sub.submittedAt.seconds * 1000).toLocaleString('ko-KR')
+                                : '-'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                              {sub.files?.length || 1}개 파일
+                            </span>
+                            <button
+                              onClick={() => handleDeleteSubmission(sub.docId)}
+                              className="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200 transition"
+                              title="제출물 삭제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* 파일 그리드 */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {sub.files?.map((file, fIdx) => {
+                            const isImage = file.type?.startsWith('image/') || 
+                                            file.url?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                            const isPdf = file.type === 'application/pdf' || 
+                                          file.url?.match(/\.pdf$/i);
+                            
+                            return (
+                              <div 
+                                key={fIdx} 
+                                className="border rounded-lg overflow-hidden bg-white hover:shadow-md transition"
+                              >
+                                {isImage ? (
+                                  <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                    <img 
+                                      src={file.url} 
+                                      alt={`제출물 ${fIdx + 1}`}
+                                      className="w-full h-32 object-cover cursor-pointer"
+                                    />
+                                  </a>
+                                ) : isPdf ? (
+                                  <div className="w-full h-32 flex flex-col items-center justify-center bg-red-50">
+                                    <FileText size={32} className="text-red-500 mb-1" />
+                                    <span className="text-xs text-red-600 font-medium">PDF</span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-32 flex flex-col items-center justify-center bg-gray-100">
+                                    <FileText size={32} className="text-gray-400 mb-1" />
+                                    <span className="text-xs text-gray-500">파일</span>
+                                  </div>
+                                )}
+                                <div className="p-2 flex justify-center gap-2 border-t">
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    보기
+                                  </a>
+                                  <a
+                                    href={file.url}
+                                    download
+                                    className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                                  >
+                                    <Download size={12} />
+                                    다운
+                                  </a>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {/* 기존 imageUrl 지원 */}
+                          {sub.imageUrl && !sub.files && (
+                            <div className="border rounded-lg overflow-hidden bg-white hover:shadow-md transition">
+                              <a href={sub.imageUrl} target="_blank" rel="noopener noreferrer">
+                                <img 
+                                  src={sub.imageUrl} 
+                                  alt="제출물"
+                                  className="w-full h-32 object-cover"
+                                />
+                              </a>
+                              <div className="p-2 flex justify-center gap-2 border-t">
+                                <a
+                                  href={sub.imageUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  보기
+                                </a>
+                                <a
+                                  href={sub.imageUrl}
+                                  download
+                                  className="text-xs text-green-600 hover:underline flex items-center gap-1"
+                                >
+                                  <Download size={12} />
+                                  다운
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

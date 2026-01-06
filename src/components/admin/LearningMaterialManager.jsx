@@ -11,7 +11,7 @@ import {
   CheckCircle, AlertCircle, Image as ImageIcon, File
 } from 'lucide-react';
 
-const LearningMaterialManager = () => {
+const LearningMaterialManager = ({ branch }) => {
   // 학습 자료 목록
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ const LearningMaterialManager = () => {
   // 데이터 로드
   useEffect(() => {
     loadMaterials();
-  }, []);
+  }, [branch]);
 
   const loadMaterials = async () => {
     setLoading(true);
@@ -65,6 +65,11 @@ const LearningMaterialManager = () => {
         id: doc.id,
         ...doc.data()
       }));
+      
+      // ★ 지점별 필터링 (branch가 없거나 현재 지점과 일치하는 것만)
+      if (branch) {
+        materialList = materialList.filter(m => !m.branch || m.branch === branch);
+      }
       
       // 클라이언트에서 정렬
       materialList.sort((a, b) => {
@@ -228,6 +233,8 @@ const LearningMaterialManager = () => {
         textFileName: materialType === 'text' ? (textFile?.name || '직접 입력') : null,
         // 이미지 정보
         imageUrls: imageUrls,
+        // ★ 지점 정보
+        branch: branch || '',
         createdAt: serverTimestamp()
       };
       

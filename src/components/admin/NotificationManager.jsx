@@ -4,11 +4,11 @@ import { db } from '../../firebase';
 import { Bell, Send, Eye, Clock, CheckCircle, Users, Calendar, Zap, List, Settings, Trash2, Edit, FileText, X } from 'lucide-react';
 import { getMonthWeek, getTodayMonthWeek, formatMonthWeek } from '../../utils/dateUtils';
 
-export default function NotificationManager() {
+export default function NotificationManager({ students: propStudents = [], branch }) {
   // 탭 상태: 'manual' (일반 발송) | 'batch' (일괄 발송) | 'scheduled' (예약 설정)
   const [activeSubTab, setActiveSubTab] = useState('manual');
   
-  const [students, setStudents] = useState([]);
+  const [students, setStudents] = useState(propStudents);
   const [homeworkList, setHomeworkList] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
@@ -72,18 +72,14 @@ export default function NotificationManager() {
   const grades = ['중1', '중2', '중3', '고1', '고2', '고3'];
   const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
+  // props로 받은 학생 목록이 변경되면 업데이트
+  useEffect(() => {
+    setStudents(propStudents);
+  }, [propStudents]);
+
   // 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      // 학생 목록
-      const studentsRef = collection(db, 'students');
-      const studentsSnapshot = await getDocs(studentsRef);
-      const studentsData = studentsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setStudents(studentsData);
-
       // 과제 목록
       const homeworkRef = collection(db, 'assignments');
       const homeworkSnapshot = await getDocs(homeworkRef);

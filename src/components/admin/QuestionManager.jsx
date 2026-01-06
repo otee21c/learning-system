@@ -6,7 +6,7 @@ import {
   Search, User, Calendar, Loader2, RefreshCw
 } from 'lucide-react';
 
-export default function QuestionManager() {
+export default function QuestionManager({ branch }) {
   const [activeType, setActiveType] = useState('concept'); // 'concept' or 'problem'
   const [conceptQuestions, setConceptQuestions] = useState([]);
   const [problemQuestions, setProblemQuestions] = useState([]);
@@ -17,7 +17,7 @@ export default function QuestionManager() {
   // 데이터 로드
   useEffect(() => {
     loadQuestions();
-  }, []);
+  }, [branch]);
 
   const loadQuestions = async () => {
     setLoading(true);
@@ -28,6 +28,12 @@ export default function QuestionManager() {
         id: doc.id,
         ...doc.data()
       }));
+      
+      // ★ 지점별 필터링
+      if (branch) {
+        conceptData = conceptData.filter(q => !q.branch || q.branch === branch);
+      }
+      
       conceptData.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
@@ -41,6 +47,12 @@ export default function QuestionManager() {
         id: doc.id,
         ...doc.data()
       }));
+      
+      // ★ 지점별 필터링
+      if (branch) {
+        problemData = problemData.filter(q => !q.branch || q.branch === branch);
+      }
+      
       problemData.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);

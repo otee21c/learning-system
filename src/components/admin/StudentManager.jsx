@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp, Camera, Image, RotateCcw } from 'lucide-react';
+import { User, Plus, Trash2, Edit2, Save, X, FileText, ChevronDown, ChevronUp, Camera, Image, RotateCcw, BarChart2 } from 'lucide-react';
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, query, where, orderBy } from 'firebase/firestore';
 import { db, auth, storage } from '../../firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { createUserWithEmailAndPassword, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-export default function StudentManager({ students }) {
+export default function StudentManager({ students, branch }) {
   const [newStudent, setNewStudent] = useState({ 
     name: '', 
     grade: '', 
@@ -20,12 +20,28 @@ export default function StudentManager({ students }) {
   
   const [editingStudent, setEditingStudent] = useState(null);
   const [sortByGrade, setSortByGrade] = useState(true);
+  const [viewMode, setViewMode] = useState('table'); // 'table' 또는 'card'
   
   // 수업 메모 관련 상태
   const [memoStudent, setMemoStudent] = useState(null); // 메모 작성 중인 학생
   const [studentMemos, setStudentMemos] = useState({}); // 학생별 메모 목록
   const [expandedMemos, setExpandedMemos] = useState({}); // 펼쳐진 메모
   const [showAllMemos, setShowAllMemos] = useState({}); // 전체보기 상태
+  
+  // 학교 성적 관련 상태
+  const [schoolGradeStudent, setSchoolGradeStudent] = useState(null); // 성적 입력 중인 학생
+  const [studentSchoolGrades, setStudentSchoolGrades] = useState({}); // 학생별 학교 성적
+  const [schoolGradeForm, setSchoolGradeForm] = useState({
+    examType: '중간고사',
+    year: new Date().getFullYear(),
+    semester: 1,
+    subject: '국어',
+    score: '',
+    grade: '',
+    rank: '',
+    totalStudents: '',
+    note: ''
+  });
   
   // 메모 작성 폼
   const todayMonthWeek = getTodayMonthWeek();
@@ -81,6 +97,44 @@ export default function StudentManager({ students }) {
     };
     
     loadMemos();
+  }, []);
+
+  // 학교 성적 데이터 로드
+  useEffect(() => {
+    const loadSchoolGrades = async () => {
+      try {
+        const gradesRef = collection(db, 'schoolGrades');
+        const snapshot = await getDocs(gradesRef);
+        const gradesData = snapshot.docs.map(doc => ({
+          docId: doc.id,
+          ...doc.data()
+        }));
+        
+        // 학생별로 그룹화
+        const grouped = {};
+        gradesData.forEach(grade => {
+          if (!grouped[grade.studentId]) {
+            grouped[grade.studentId] = [];
+          }
+          grouped[grade.studentId].push(grade);
+        });
+        
+        // 각 학생의 성적을 최신순 정렬
+        Object.keys(grouped).forEach(studentId => {
+          grouped[studentId].sort((a, b) => {
+            if (b.year !== a.year) return b.year - a.year;
+            if (b.semester !== a.semester) return b.semester - a.semester;
+            return 0;
+          });
+        });
+        
+        setStudentSchoolGrades(grouped);
+      } catch (error) {
+        console.error('학교 성적 로드 실패:', error);
+      }
+    };
+    
+    loadSchoolGrades();
   }, []);
 
   // 이미지 데이터 로드
@@ -264,6 +318,7 @@ export default function StudentManager({ students }) {
         birthDate: newStudent.birthDate,
         id: newStudent.id,
         password: newStudent.password,
+        branch: branch, // 지점 정보 추가
         exams: []
       });
       
@@ -507,6 +562,81 @@ export default function StudentManager({ students }) {
     }));
   };
 
+  // 학교 성적 저장
+  const handleSaveSchoolGrade = async () => {
+    if (!schoolGradeStudent) return;
+    if (!schoolGradeForm.score && !schoolGradeForm.grade) {
+      alert('점수 또는 등급을 입력해주세요.');
+      return;
+    }
+
+    try {
+      const newGrade = {
+        studentId: schoolGradeStudent.id,
+        studentName: schoolGradeStudent.name,
+        examType: schoolGradeForm.examType,
+        year: parseInt(schoolGradeForm.year),
+        semester: parseInt(schoolGradeForm.semester),
+        subject: schoolGradeForm.subject,
+        score: schoolGradeForm.score ? parseInt(schoolGradeForm.score) : null,
+        grade: schoolGradeForm.grade || null,
+        rank: schoolGradeForm.rank ? parseInt(schoolGradeForm.rank) : null,
+        totalStudents: schoolGradeForm.totalStudents ? parseInt(schoolGradeForm.totalStudents) : null,
+        note: schoolGradeForm.note || '',
+        createdAt: new Date().toISOString()
+      };
+
+      const docRef = await addDoc(collection(db, 'schoolGrades'), newGrade);
+      
+      // 로컬 상태 업데이트
+      setStudentSchoolGrades(prev => ({
+        ...prev,
+        [schoolGradeStudent.id]: [
+          { docId: docRef.id, ...newGrade },
+          ...(prev[schoolGradeStudent.id] || [])
+        ]
+      }));
+      
+      alert('학교 성적이 저장되었습니다.');
+      
+      // 폼 초기화
+      setSchoolGradeForm({
+        examType: '중간고사',
+        year: new Date().getFullYear(),
+        semester: 1,
+        subject: '국어',
+        score: '',
+        grade: '',
+        rank: '',
+        totalStudents: '',
+        note: ''
+      });
+      setSchoolGradeStudent(null);
+    } catch (error) {
+      console.error('학교 성적 저장 실패:', error);
+      alert('저장에 실패했습니다.');
+    }
+  };
+
+  // 학교 성적 삭제
+  const handleDeleteSchoolGrade = async (studentId, gradeDocId) => {
+    if (!confirm('이 성적을 삭제하시겠습니까?')) return;
+
+    try {
+      await deleteDoc(doc(db, 'schoolGrades', gradeDocId));
+      
+      setStudentSchoolGrades(prev => ({
+        ...prev,
+        [studentId]: prev[studentId].filter(g => g.docId !== gradeDocId)
+      }));
+      
+      alert('삭제되었습니다.');
+    } catch (error) {
+      console.error('학교 성적 삭제 실패:', error);
+      alert('삭제에 실패했습니다.');
+    }
+  };
+
   // 학년별로 그룹화
   const groupByGrade = (studentsList) => {
     const grouped = {};
@@ -531,12 +661,20 @@ export default function StudentManager({ students }) {
         <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
           학생 관리
         </h2>
-        <button
-          onClick={() => setSortByGrade(!sortByGrade)}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
-        >
-          {sortByGrade ? '전체 보기' : '학년별 정렬'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode(viewMode === 'table' ? 'card' : 'table')}
+            className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition text-sm"
+          >
+            {viewMode === 'table' ? '📇 카드형' : '📋 테이블형'}
+          </button>
+          <button
+            onClick={() => setSortByGrade(!sortByGrade)}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition text-sm"
+          >
+            {sortByGrade ? '전체 보기' : '학년별 정렬'}
+          </button>
+        </div>
       </div>
 
       {/* 학생 추가 폼 */}
@@ -686,6 +824,310 @@ export default function StudentManager({ students }) {
         </div>
       )}
 
+      {/* 학생 정보 수정 모달 (테이블 모드용) */}
+      {editingStudent && viewMode === 'table' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">
+                ✏️ {editingStudent.name} 정보 수정
+              </h3>
+              <button
+                onClick={() => setEditingStudent(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">이름</label>
+                  <input
+                    type="text"
+                    value={editingStudent.name}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, name: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학년</label>
+                  <select
+                    value={editingStudent.grade}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, grade: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="중1">중1</option>
+                    <option value="중2">중2</option>
+                    <option value="중3">중3</option>
+                    <option value="고1">고1</option>
+                    <option value="고2">고2</option>
+                    <option value="고3">고3</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">학교</label>
+                <input
+                  type="text"
+                  value={editingStudent.school || ''}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, school: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학생 전화번호</label>
+                  <input
+                    type="text"
+                    value={editingStudent.phone || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, phone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학부모 전화번호</label>
+                  <input
+                    type="text"
+                    value={editingStudent.parentPhone || ''}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, parentPhone: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">생년월일 (MMDD)</label>
+                <input
+                  type="text"
+                  value={editingStudent.birthDate || ''}
+                  onChange={(e) => setEditingStudent({ ...editingStudent, birthDate: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              
+              <div className="pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-500 mb-2">※ 아이디/비밀번호는 수정할 수 없습니다</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="px-3 py-2 bg-gray-100 rounded-lg">
+                    <p className="text-xs text-gray-500">아이디</p>
+                    <p className="text-sm font-medium text-gray-700">{editingStudent.id}</p>
+                  </div>
+                  <div className="px-3 py-2 bg-gray-100 rounded-lg">
+                    <p className="text-xs text-gray-500">비밀번호</p>
+                    <p className="text-sm font-medium text-gray-700">{editingStudent.password || '미등록'}</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleUpdateStudent}
+                  className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition flex items-center justify-center gap-2"
+                >
+                  <Save size={16} />
+                  저장
+                </button>
+                <button
+                  onClick={() => setEditingStudent(null)}
+                  className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 transition flex items-center justify-center gap-2"
+                >
+                  <X size={16} />
+                  취소
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 학교 성적 입력 모달 */}
+      {schoolGradeStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg">
+                📊 {schoolGradeStudent.name} 학교 성적
+              </h3>
+              <button
+                onClick={() => {
+                  setSchoolGradeStudent(null);
+                  setSchoolGradeForm({
+                    examType: '중간고사',
+                    year: new Date().getFullYear(),
+                    semester: 1,
+                    subject: '국어',
+                    score: '',
+                    grade: '',
+                    rank: '',
+                    totalStudents: '',
+                    note: ''
+                  });
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* 새 성적 입력 폼 */}
+            <div className="space-y-3 mb-6 p-4 bg-blue-50 rounded-lg">
+              <h4 className="font-semibold text-blue-800">새 성적 입력</h4>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">연도</label>
+                  <select
+                    value={schoolGradeForm.year}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, year: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    {[2024, 2025, 2026, 2027].map(y => (
+                      <option key={y} value={y}>{y}년</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">학기</label>
+                  <select
+                    value={schoolGradeForm.semester}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, semester: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    <option value={1}>1학기</option>
+                    <option value={2}>2학기</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">시험</label>
+                  <select
+                    value={schoolGradeForm.examType}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, examType: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    <option value="중간고사">중간고사</option>
+                    <option value="기말고사">기말고사</option>
+                    <option value="모의고사">모의고사</option>
+                    <option value="수행평가">수행평가</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">과목</label>
+                  <select
+                    value={schoolGradeForm.subject}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, subject: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    <option value="국어">국어</option>
+                    <option value="문학">문학</option>
+                    <option value="독서">독서</option>
+                    <option value="화법과작문">화법과작문</option>
+                    <option value="언어와매체">언어와매체</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">점수</label>
+                  <input
+                    type="number"
+                    value={schoolGradeForm.score}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, score: e.target.value })}
+                    placeholder="점수"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">등급</label>
+                  <select
+                    value={schoolGradeForm.grade}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, grade: e.target.value })}
+                    className="w-full p-2 border rounded text-sm"
+                  >
+                    <option value="">-</option>
+                    {[1,2,3,4,5,6,7,8,9].map(g => (
+                      <option key={g} value={g}>{g}등급</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">석차</label>
+                  <input
+                    type="number"
+                    value={schoolGradeForm.rank}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, rank: e.target.value })}
+                    placeholder="석차"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">전체인원</label>
+                  <input
+                    type="number"
+                    value={schoolGradeForm.totalStudents}
+                    onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, totalStudents: e.target.value })}
+                    placeholder="인원"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">메모</label>
+                <input
+                  type="text"
+                  value={schoolGradeForm.note}
+                  onChange={(e) => setSchoolGradeForm({ ...schoolGradeForm, note: e.target.value })}
+                  placeholder="특이사항"
+                  className="w-full p-2 border rounded text-sm"
+                />
+              </div>
+              <button
+                onClick={handleSaveSchoolGrade}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
+              >
+                성적 저장
+              </button>
+            </div>
+
+            {/* 기존 성적 목록 */}
+            <div>
+              <h4 className="font-semibold text-gray-700 mb-2">📋 성적 기록</h4>
+              {studentSchoolGrades[schoolGradeStudent.id]?.length > 0 ? (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {studentSchoolGrades[schoolGradeStudent.id].map(grade => (
+                    <div key={grade.docId} className="bg-gray-50 rounded-lg p-3 text-sm">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-medium">{grade.year}년 {grade.semester}학기 {grade.examType}</span>
+                          <span className="ml-2 text-gray-500">{grade.subject}</span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteSchoolGrade(schoolGradeStudent.id, grade.docId)}
+                          className="text-red-500 hover:text-red-700 text-xs"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                      <div className="mt-1 text-gray-600">
+                        {grade.score && <span className="mr-3">점수: {grade.score}점</span>}
+                        {grade.grade && <span className="mr-3">{grade.grade}등급</span>}
+                        {grade.rank && grade.totalStudents && (
+                          <span className="mr-3">석차: {grade.rank}/{grade.totalStudents}</span>
+                        )}
+                      </div>
+                      {grade.note && <p className="text-xs text-gray-500 mt-1">{grade.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm text-center py-4">등록된 성적이 없습니다.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 이미지 업로드 모달 */}
       {imageStudent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -802,7 +1244,97 @@ export default function StudentManager({ students }) {
             <h3 className="text-lg font-bold text-gray-700 mb-3 pb-2 border-b-2 border-gray-200">
               {grade} {sortByGrade && grade !== '전체' && `(${displayStudents[grade].length}명)`}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* 테이블 형태 (한 줄에 한 명) */}
+            {viewMode === 'table' ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left">이름</th>
+                      <th className="px-3 py-2 text-left">학년</th>
+                      <th className="px-3 py-2 text-left">학교</th>
+                      <th className="px-3 py-2 text-left">학생번호</th>
+                      <th className="px-3 py-2 text-left">학부모번호</th>
+                      <th className="px-3 py-2 text-left">생년월일</th>
+                      <th className="px-3 py-2 text-left">아이디</th>
+                      <th className="px-3 py-2 text-left">시험</th>
+                      <th className="px-3 py-2 text-left">학교성적</th>
+                      <th className="px-3 py-2 text-left">메모</th>
+                      <th className="px-3 py-2 text-center">관리</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayStudents[grade].map((student, idx) => (
+                      <tr key={student.id} className={`border-b hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                        <td className="px-3 py-2 font-medium">{student.name}</td>
+                        <td className="px-3 py-2">{student.grade}</td>
+                        <td className="px-3 py-2">{student.school || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{student.phone || '-'}</td>
+                        <td className="px-3 py-2 text-gray-600">{student.parentPhone || '-'}</td>
+                        <td className="px-3 py-2">{student.birthDate || '-'}</td>
+                        <td className="px-3 py-2 text-gray-500">{student.id}</td>
+                        <td className="px-3 py-2">{student.exams?.length || 0}개</td>
+                        <td className="px-3 py-2">
+                          <button
+                            onClick={() => setSchoolGradeStudent(student)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            {studentSchoolGrades[student.id]?.length || 0}개 📊
+                          </button>
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-xs text-gray-500">
+                            {studentMemos[student.id]?.length || 0}개
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => setMemoStudent(student)}
+                              className="p-1.5 bg-green-100 text-green-600 rounded hover:bg-green-200"
+                              title="수업 메모"
+                            >
+                              <FileText size={14} />
+                            </button>
+                            <button
+                              onClick={() => setImageStudent(student)}
+                              className="p-1.5 bg-purple-100 text-purple-600 rounded hover:bg-purple-200"
+                              title="이미지 저장"
+                            >
+                              <Camera size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleResetQuestionCount(student)}
+                              className="p-1.5 bg-orange-100 text-orange-600 rounded hover:bg-orange-200"
+                              title="질문 초기화"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                            <button
+                              onClick={() => setEditingStudent(student)}
+                              className="p-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
+                              title="수정"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteStudent(student.id)}
+                              className="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200"
+                              title="삭제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* 카드 형태 (기존) */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {displayStudents[grade].map((student) => (
                 <div
                   key={student.id}
@@ -1038,7 +1570,8 @@ export default function StudentManager({ students }) {
                   )}
                 </div>
               ))}
-            </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

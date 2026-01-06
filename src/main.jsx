@@ -10,6 +10,7 @@ import ContactPage from './components/homepage/pages/ContactPage.jsx'
 import DaechiPage from './components/homepage/pages/DaechiPage.jsx'
 import DarakbangPage from './components/homepage/pages/DarakbangPage.jsx'
 import PrivacyPage from './components/homepage/pages/PrivacyPage.jsx'
+import ParentReport from './components/homepage/pages/ParentReport.jsx'
 
 // LMS는 필요할 때만 로드 (Firebase 에러 방지)
 const App = lazy(() => import('./App.jsx'))
@@ -61,6 +62,7 @@ createRoot(document.getElementById('root')).render(
         <Route path="/daechi" element={<DaechiPage />} />
         <Route path="/darakbang" element={<DarakbangPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/parent-report" element={<ParentReport />} />
         
         {/* LMS (학습관리시스템) - 필요할 때만 로드 */}
         <Route path="/lms" element={
