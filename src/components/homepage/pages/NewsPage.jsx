@@ -274,6 +274,9 @@ export default function NewsPage() {
             <div className="hp-content-view">
               <button onClick={handleBack} className="hp-btn hp-btn-back">← 목록으로</button>
               <h2>{selectedNews.title}</h2>
+              <p className="hp-content-date">
+                {new Date(selectedNews.createdAt).toLocaleDateString('ko-KR')}
+              </p>
               {getThumbnailUrl(selectedNews) && (
                 <img src={getThumbnailUrl(selectedNews)} alt={selectedNews.title} className="hp-content-image" />
               )}
@@ -309,6 +312,9 @@ export default function NewsPage() {
                     </div>
                     <div className="hp-card-content">
                       <h3>{news.title}</h3>
+                      <p className="hp-card-date">
+                        {new Date(news.createdAt).toLocaleDateString('ko-KR')}
+                      </p>
                     </div>
                   </div>
                 ))

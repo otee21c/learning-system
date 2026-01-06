@@ -170,6 +170,9 @@ export default function NoticePage() {
             <div className="hp-content-view">
               <button onClick={handleBack} className="hp-btn hp-btn-back">← 목록으로</button>
               <h2>{selectedNotice.title}</h2>
+              <p className="hp-content-date">
+                {new Date(selectedNotice.createdAt).toLocaleDateString('ko-KR')}
+              </p>
               <div className="hp-content-body">
                 {selectedNotice.content ? (
                   <div dangerouslySetInnerHTML={{ __html: selectedNotice.content }} />
@@ -192,6 +195,7 @@ export default function NoticePage() {
                     <tr>
                       <th>번호</th>
                       <th>제목</th>
+                      <th>작성일</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -199,6 +203,7 @@ export default function NoticePage() {
                       <tr key={notice.id} onClick={() => handleView(notice)}>
                         <td>{noticeList.length - index}</td>
                         <td>{notice.title}</td>
+                        <td>{new Date(notice.createdAt).toLocaleDateString('ko-KR')}</td>
                       </tr>
                     ))}
                   </tbody>

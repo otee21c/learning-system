@@ -66,23 +66,16 @@ export default function HomeworkSubmission({ currentUser, homeworks = [] }) {
         uploadedUrls.push({ url, name: file.name, type: file.type });
       }
 
-      // 선택한 과제 정보 가져오기
-      const selectedHomeworkData = homeworks.find(h => h.id === selectedHomework);
-
-      // Firestore에 저장 (★ taskCode, month, week 추가로 자동 체크)
+      // Firestore에 저장
       await addDoc(collection(db, 'homeworkSubmissions'), {
         studentId: currentUser.id,
         studentName: currentUser.name,
         homeworkId: selectedHomework,
-        homeworkTitle: selectedHomeworkData?.title || '',
-        taskCode: selectedHomeworkData?.taskCode || '',
-        month: selectedHomeworkData?.month || null,
-        week: selectedHomeworkData?.week || null,
+        homeworkTitle: homeworks.find(h => h.id === selectedHomework)?.title || '',
         files: uploadedUrls,
         fileCount: uploadedUrls.length,
         uploadType: uploadType,
         submittedAt: new Date().toISOString(),
-        submitted: true,
         status: '제출완료'
       });
 

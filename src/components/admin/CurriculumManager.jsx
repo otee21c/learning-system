@@ -4,7 +4,7 @@ import { db } from '../../firebase';
 import { getMonthWeek, getTodayMonthWeek } from '../../utils/dateUtils';
 import { ChevronDown, ChevronUp, Filter, Calendar, Users } from 'lucide-react';
 
-const CurriculumManager = ({ students = [], branch }) => {
+const CurriculumManager = ({ students = [] }) => {
   const [curriculums, setCurriculums] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingCurriculum, setEditingCurriculum] = useState(null);

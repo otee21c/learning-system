@@ -49,7 +49,7 @@ const ProblemSolving = ({ currentUser }) => {
   // 학습 자료 로드
   useEffect(() => {
     loadMaterials();
-  }, [currentUser]);
+  }, []);
 
   // 질문 이력 로드
   useEffect(() => {
@@ -66,11 +66,6 @@ const ProblemSolving = ({ currentUser }) => {
         id: doc.id,
         ...doc.data()
       }));
-      
-      // ★ 지점별 필터링 (branch가 없거나 현재 학생 지점과 일치하는 것만)
-      if (currentUser?.branch) {
-        materialList = materialList.filter(m => !m.branch || m.branch === currentUser.branch);
-      }
       
       materialList.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
@@ -262,7 +257,6 @@ const ProblemSolving = ({ currentUser }) => {
         question: finalQuestion,
         questionImageUrls: uploadedImageUrls,
         answer: answerText,
-        branch: currentUser.branch || '', // ★ 지점 정보
         createdAt: serverTimestamp()
       });
       
