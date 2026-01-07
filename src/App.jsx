@@ -315,7 +315,11 @@ export default function App() {
           {currentUser.type === 'student' && (
             <>
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
-              {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
+              {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks.filter(h => {
+                const homeworkBranch = h.branch || 'gwangjin';
+                const studentBranch = currentUser.branch || 'gwangjin';
+                return homeworkBranch === studentBranch;
+              })} />}
               {activeTab === 'video-learning' && <VideoLearning currentUser={currentUser} />}
               {activeTab === 'concept-question' && <ConceptQuestion currentUser={currentUser} />}
               {activeTab === 'problem-solving' && <ProblemSolving currentUser={currentUser} />}
