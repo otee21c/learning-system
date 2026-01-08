@@ -1040,14 +1040,23 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                 </button>
               </div>
               <table className="w-full text-sm border-collapse">
-                <thead><tr className="bg-gray-100"><th className="px-2 py-2">상태</th><th className="px-2 py-2">이름</th><th className="px-2 py-2">학생</th><th className="px-2 py-2">답안</th><th className="px-2 py-2">수정</th></tr></thead>
+                <thead><tr className="bg-gray-100"><th className="px-2 py-2">점수</th><th className="px-2 py-2">이름</th><th className="px-2 py-2">학생</th><th className="px-2 py-2">답안</th><th className="px-2 py-2">수정</th></tr></thead>
                 <tbody>
                   {scanResults.map((result, i) => {
                     const saved = savedResults.find(s => s.pageIndex === i);
+                    // 저장 전에도 채점 결과 미리 계산
+                    const previewGrade = selectedExam?.answers ? gradeAnswers(result.answers, selectedExam) : null;
                     return (
                       <React.Fragment key={i}>
                         <tr className="border-b">
-                          <td className="px-2 py-2">{saved?.saveStatus === 'success' ? <span className="text-green-600">{saved.score}/{saved.maxScore}</span> : saved?.saveStatus ? <span className="text-yellow-600">!</span> : '-'}</td>
+                          <td className="px-2 py-2">
+                            {saved?.saveStatus === 'success' 
+                              ? <span className="text-green-600 font-bold">{saved.score}/{saved.maxScore}✓</span> 
+                              : previewGrade 
+                                ? <span className="text-blue-600">{previewGrade.totalScore}/{previewGrade.maxScore}</span>
+                                : '-'
+                            }
+                          </td>
                           <td className="px-2 py-2">{result.studentName || '-'}</td>
                           <td className="px-2 py-2">
                             <select value={result.matchedStudentId || ''} onChange={(e) => updateScanResult(i, 'matchedStudentId', e.target.value)} className="w-24 border rounded px-1 py-1">
@@ -1061,16 +1070,32 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                         {editingIndex === i && (
                           <tr><td colSpan={5} className="bg-gray-50 p-3">
                             <div className="grid grid-cols-9 gap-1">
-                              {result.answers?.map((ans, j) => (
-                                <div key={j} className="flex items-center gap-1">
-                                  <span className="text-xs w-4">{j+1}</span>
-                                  <select value={ans} onChange={(e) => updateAnswer(i, j, e.target.value)} className={`w-10 border rounded text-xs ${ans === 0 ? 'bg-red-50' : ''}`}>
-                                    <option value={0}>-</option>
-                                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
-                                  </select>
-                                </div>
-                              ))}
+                              {result.answers?.map((ans, j) => {
+                                // 정답과 비교하여 색상 표시
+                                const correctAns = selectedExam?.answers?.[j];
+                                const isCorrect = correctAns && ans === correctAns;
+                                const isWrong = correctAns && ans !== 0 && ans !== correctAns;
+                                return (
+                                  <div key={j} className="flex items-center gap-1">
+                                    <span className="text-xs w-4">{j+1}</span>
+                                    <select 
+                                      value={ans} 
+                                      onChange={(e) => updateAnswer(i, j, e.target.value)} 
+                                      className={`w-10 border rounded text-xs ${ans === 0 ? 'bg-red-50' : isCorrect ? 'bg-green-100' : isWrong ? 'bg-red-100' : ''}`}
+                                    >
+                                      <option value={0}>-</option>
+                                      {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                                    </select>
+                                  </div>
+                                );
+                              })}
                             </div>
+                            {/* 정답 표시 */}
+                            {selectedExam?.answers && (
+                              <div className="mt-2 text-xs text-gray-500">
+                                정답: {selectedExam.answers.slice(0, 15).join(', ')}{selectedExam.answers.length > 15 ? '...' : ''}
+                              </div>
+                            )}
                           </td></tr>
                         )}
                       </React.Fragment>
