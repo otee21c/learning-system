@@ -226,12 +226,14 @@ export default function OMRBatchGrading({ exams, students, branch }) {
         // AI로 이름/생일만 인식
         let studentName = '';
         let birthDate = '';
+        let nameRecognized = false;
         try {
           const nameResult = await recognizeNameOnly(pdfPages[i].base64);
           studentName = nameResult.studentName || '';
           birthDate = nameResult.birthDate || '';
+          nameRecognized = !!studentName;
         } catch (e) {
-          console.log('이름 인식 실패, 수동 입력 필요');
+          console.log('이름 인식 실패:', e.message);
         }
         
         results.push({
@@ -243,7 +245,9 @@ export default function OMRBatchGrading({ exams, students, branch }) {
           pageNum: pdfPages[i].pageNum,
           matchedStudentId: findMatchingStudent(studentName, birthDate),
           scanMethod: 'coordinate',
-          confidence: gradeResult.details?.map(d => d.confidence) || []
+          nameRecognized: nameRecognized,
+          confidence: gradeResult.details?.map(d => d.confidence) || [],
+          ambiguousQuestions: gradeResult.details?.filter(d => d.reason === 'ambiguous').map(d => d.question) || []
         });
       } catch (error) {
         console.error('좌표 기반 스캔 오류:', error);
@@ -1057,14 +1061,24 @@ export default function OMRBatchGrading({ exams, students, branch }) {
                                 : '-'
                             }
                           </td>
-                          <td className="px-2 py-2">{result.studentName || '-'}</td>
+                          <td className="px-2 py-2">
+                            {result.studentName || <span className="text-gray-400">미인식</span>}
+                            {result.birthDate && <span className="text-xs text-gray-400 ml-1">({result.birthDate})</span>}
+                          </td>
                           <td className="px-2 py-2">
                             <select value={result.matchedStudentId || ''} onChange={(e) => updateScanResult(i, 'matchedStudentId', e.target.value)} className="w-24 border rounded px-1 py-1">
                               <option value="">선택</option>
                               {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                             </select>
                           </td>
-                          <td className="px-2 py-2 text-gray-500">{result.answers?.slice(0, 6).join(',')}...</td>
+                          <td className="px-2 py-2 text-gray-500">
+                            {result.answers?.slice(0, 6).join(',')}...
+                            {result.ambiguousQuestions?.length > 0 && (
+                              <span className="text-yellow-600 ml-1" title={`애매한 문제: ${result.ambiguousQuestions.join(', ')}`}>
+                                ⚠{result.ambiguousQuestions.length}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-2 py-2"><button onClick={() => setEditingIndex(editingIndex === i ? null : i)}>{editingIndex === i ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button></td>
                         </tr>
                         {editingIndex === i && (

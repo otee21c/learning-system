@@ -132,15 +132,28 @@ export function gradeQuestion(imageData, imgWidth, config, questionIndex) {
     }
   }
   
-  // 신뢰도 계산 (두 번째로 어두운 값과의 차이)
+  // 두 번째로 어두운 값 찾기
   const sortedValues = Object.values(brightnesses).sort((a, b) => a - b);
-  const confidence = sortedValues.length > 1 ? sortedValues[1] - sortedValues[0] : 0;
+  const secondDarkest = sortedValues.length > 1 ? sortedValues[1] : 255;
+  
+  // 신뢰도 = 두 번째로 어두운 값 - 가장 어두운 값
+  const confidence = secondDarkest - darkestValue;
+  
+  // 신뢰도 기준:
+  // - 마킹이 확실하려면 가장 어두운 값이 threshold보다 낮아야 함
+  // - 그리고 두 번째와 차이가 최소 minConfidence 이상이어야 함
+  const minConfidence = 15; // 최소 신뢰도 차이
+  
+  const isDark = darkestValue < OMR_CONFIG.threshold;
+  const isConfident = confidence >= minConfidence;
   
   return {
-    answer: darkestValue < OMR_CONFIG.threshold ? darkestChoice : null,
+    answer: (isDark && isConfident) ? darkestChoice : null,
     confidence: confidence,
     brightnesses: brightnesses,
-    isDark: darkestValue < OMR_CONFIG.threshold
+    isDark: isDark,
+    isConfident: isConfident,
+    reason: !isDark ? 'too_bright' : !isConfident ? 'ambiguous' : 'ok'
   };
 }
 
