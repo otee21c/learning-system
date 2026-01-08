@@ -214,7 +214,7 @@ export default function OMRBatchGrading({ exams, students, branch }) {
       setScanProgress({ current: i + 1, total: pdfPages.length });
       
       try {
-        // 좌표 기반 채점
+        // 좌표 기반 답안 인식
         const gradeResult = await gradeOMRFromBase64(pdfPages[i].base64);
         
         // answers 객체를 배열로 변환 (1번부터 순서대로)
@@ -222,16 +222,26 @@ export default function OMRBatchGrading({ exams, students, branch }) {
         for (let q = 1; q <= selectedExam.totalQuestions; q++) {
           answersArray.push(gradeResult.answers[q] || 0);
         }
+
+        // AI로 이름/생일만 인식
+        let studentName = '';
+        let birthDate = '';
+        try {
+          const nameResult = await recognizeNameOnly(pdfPages[i].base64);
+          studentName = nameResult.studentName || '';
+          birthDate = nameResult.birthDate || '';
+        } catch (e) {
+          console.log('이름 인식 실패, 수동 입력 필요');
+        }
         
         results.push({
-          studentName: '', // 좌표 기반은 이름 인식 안 함 - 수동 입력 필요
-          birthDate: '',
+          studentName: studentName,
+          birthDate: birthDate,
           selectedSubject: '화작',
           answers: answersArray,
           pageIndex: i,
           pageNum: pdfPages[i].pageNum,
-          matchedStudentId: '',
-          // 좌표 기반 추가 정보
+          matchedStudentId: findMatchingStudent(studentName, birthDate),
           scanMethod: 'coordinate',
           confidence: gradeResult.details?.map(d => d.confidence) || []
         });
@@ -253,6 +263,32 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     setIsScanning(false);
   };
 
+  // AI로 이름/생일만 인식 (가벼운 프롬프트)
+  const recognizeNameOnly = async (base64Image) => {
+    const prompt = `OMR 답안지에서 이름과 생일만 인식해주세요. JSON만 출력:
+{"studentName":"이름","birthDate":"MMDD"}
+- 이름: 손글씨 또는 자모 마킹에서 인식
+- 생일: 4자리 숫자 (예: 0112)`;
+
+    const response = await fetch('/api/analyze-omr', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64Image, prompt })
+    });
+
+    if (!response.ok) throw new Error('이름 인식 실패');
+    const data = await response.json();
+    
+    try {
+      const jsonMatch = data.result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {}
+    
+    return { studentName: '', birthDate: '' };
+  };
+
   // 통합 스캔 함수 (모드에 따라 분기)
   const scanOMR = async () => {
     if (scanMode === 'coordinate') {
@@ -262,11 +298,22 @@ export default function OMRBatchGrading({ exams, students, branch }) {
     }
   };
 
-  const findMatchingStudent = (name) => {
+  const findMatchingStudent = (name, birthDate = '') => {
     if (!name) return '';
-    let match = students.find(s => s.name === name);
-    if (match) return match.id;
-    match = students.find(s => s.name.includes(name) || name.includes(s.name));
+    
+    // 1. 정확히 일치하는 이름
+    let matches = students.filter(s => s.name === name);
+    
+    // 동명이인이 있으면 생일로 2차 매칭
+    if (matches.length > 1 && birthDate) {
+      const exactMatch = matches.find(s => s.birthDate === birthDate || s.birthday === birthDate);
+      if (exactMatch) return exactMatch.id;
+    }
+    
+    if (matches.length === 1) return matches[0].id;
+    
+    // 2. 부분 일치
+    let match = students.find(s => s.name.includes(name) || name.includes(s.name));
     return match ? match.id : '';
   };
 
