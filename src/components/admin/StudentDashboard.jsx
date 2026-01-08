@@ -6,14 +6,14 @@ import {
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
   CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2, Download
 } from 'lucide-react';
-import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
+import { getTodayMonthWeek, getMonthWeek, getMonthRoundFromSchedules, formatMonthRound } from '../../utils/dateUtils';
 
-const StudentDashboard = ({ students = [], branch }) => {
+const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
   const todayMonthWeek = getTodayMonthWeek();
   
   // 필터 상태
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
-  const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
+  const [selectedRound, setSelectedRound] = useState(1);  // week -> round
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState(''); // 학년 필터
   const [schoolFilter, setSchoolFilter] = useState(''); // 학교 필터
@@ -251,7 +251,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     const record = attendanceData.find(a => 
       a.studentId === studentId && 
       a.month === selectedMonth && 
-      a.week === selectedWeek
+      a.round === selectedRound
     );
     return record?.status || '-';
   };
@@ -261,7 +261,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     const record = curriculumData.find(c => 
       c.students?.includes(studentId) && 
       c.month === selectedMonth && 
-      c.weekNumber === selectedWeek
+      c.roundNumber === selectedRound
     );
     return record ? true : false;
   };
@@ -317,7 +317,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     const submissions = homeworkData.filter(h => 
       h.studentId === studentId && 
       h.month === selectedMonth && 
-      h.week === selectedWeek
+      h.round === selectedRound
     );
     
     // 과제 코드 수집
@@ -345,11 +345,11 @@ const StudentDashboard = ({ students = [], branch }) => {
     if (!taskCode) return;
     
     try {
-      // 기존 해당 월/주차 데이터 확인
+      // 기존 해당 월/차 데이터 확인
       const existing = homeworkData.find(h => 
         h.studentId === studentId && 
         h.month === selectedMonth && 
-        h.week === selectedWeek &&
+        h.round === selectedRound &&
         h.taskCode === taskCode
       );
       
@@ -364,7 +364,7 @@ const StudentDashboard = ({ students = [], branch }) => {
           studentId,
           studentName: student?.name || '',
           month: selectedMonth,
-          week: selectedWeek,
+          round: selectedRound,
           taskCode,
           submitted: true,
           submittedAt: serverTimestamp(),
@@ -385,18 +385,18 @@ const StudentDashboard = ({ students = [], branch }) => {
     return homeworkData.some(h => 
       h.studentId === studentId && 
       h.month === selectedMonth && 
-      h.week === selectedWeek &&
+      h.round === selectedRound &&
       h.taskCode === taskCode
     );
   };
 
-  // 학생별 성적 가져오기 (해당 월/주차)
+  // 학생별 성적 가져오기 (해당 월/차)
   const getRecentScore = (studentId) => {
     const student = students.find(s => s.id === studentId);
     if (!student?.exams || student.exams.length === 0) return '-';
     
     const monthWeekExams = student.exams.filter(e => 
-      e.month === selectedMonth && e.week === selectedWeek
+      e.month === selectedMonth && e.round === selectedRound
     );
     
     if (monthWeekExams.length > 0) {
@@ -415,7 +415,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     const record = memoData.find(m => 
       m.studentId === studentId && 
       m.month === selectedMonth && 
-      m.week === selectedWeek
+      m.round === selectedRound
     );
     return record?.content || '';
   };
@@ -437,7 +437,7 @@ const StudentDashboard = ({ students = [], branch }) => {
       const existing = attendanceData.find(a => 
         a.studentId === studentId && 
         a.month === selectedMonth && 
-        a.week === selectedWeek
+        a.round === selectedRound
       );
 
       const today = new Date().toISOString().split('T')[0];
@@ -454,7 +454,7 @@ const StudentDashboard = ({ students = [], branch }) => {
           studentId,
           studentName: student?.name || '',
           month: selectedMonth,
-          week: selectedWeek,
+          round: selectedRound,
           date: today,
           status: newStatus,
           note: '',
@@ -476,7 +476,7 @@ const StudentDashboard = ({ students = [], branch }) => {
       const existing = homeworkData.find(h => 
         h.studentId === studentId && 
         h.month === selectedMonth && 
-        h.week === selectedWeek
+        h.round === selectedRound
       );
 
       if (existing) {
@@ -489,7 +489,7 @@ const StudentDashboard = ({ students = [], branch }) => {
           studentId: studentId,
           studentName: student?.name || '',
           month: selectedMonth,
-          week: selectedWeek,
+          round: selectedRound,
           manualStatus: newStatus,
           submitted: false,
           submittedAt: serverTimestamp()
@@ -509,7 +509,7 @@ const StudentDashboard = ({ students = [], branch }) => {
       const existing = memoData.find(m => 
         m.studentId === studentId && 
         m.month === selectedMonth && 
-        m.week === selectedWeek
+        m.round === selectedRound
       );
 
       if (existing) {
@@ -520,7 +520,7 @@ const StudentDashboard = ({ students = [], branch }) => {
           studentId,
           studentName: student?.name || '',
           month: selectedMonth,
-          week: selectedWeek,
+          round: selectedRound,
           content: memoContent,
           createdAt: new Date().toISOString()
         });
@@ -541,7 +541,7 @@ const StudentDashboard = ({ students = [], branch }) => {
       const existing = memoData.find(m => 
         m.studentId === studentId && 
         m.month === selectedMonth && 
-        m.week === selectedWeek
+        m.round === selectedRound
       );
 
       if (existing) {
@@ -617,7 +617,7 @@ const StudentDashboard = ({ students = [], branch }) => {
         note: scoreForm.note || '',
         date: today,
         month: selectedMonth,
-        week: selectedWeek,
+        round: selectedRound,
         manualEntry: true,
         createdAt: new Date().toISOString()
       };
@@ -689,7 +689,7 @@ const StudentDashboard = ({ students = [], branch }) => {
     const record = homeworkData.find(h => 
       h.studentId === studentId && 
       h.month === selectedMonth && 
-      h.week === selectedWeek
+      h.round === selectedRound
     );
     return record?.manualStatus || '';
   };
@@ -735,12 +735,12 @@ const StudentDashboard = ({ students = [], branch }) => {
 
           <div className="flex items-center gap-2">
             <select
-              value={selectedWeek}
+              value={selectedRound}
               onChange={(e) => setSelectedWeek(Number(e.target.value))}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
               {[1,2,3,4,5].map(w => (
-                <option key={w} value={w}>{w}주차</option>
+                <option key={w} value={w}>{w}차</option>
               ))}
             </select>
           </div>
@@ -1094,7 +1094,7 @@ const StudentDashboard = ({ students = [], branch }) => {
                                     const weekStatus = attendanceData.find(a => 
                                       a.studentId === student.id && 
                                       a.month === selectedMonth && 
-                                      a.week === week
+                                      a.round === week
                                     )?.status;
                                     return (
                                       <div key={week} className="text-center">
@@ -1111,11 +1111,11 @@ const StudentDashboard = ({ students = [], branch }) => {
                                 <div className="space-y-1 max-h-20 overflow-y-auto">
                                   {memoData
                                     .filter(m => m.studentId === student.id)
-                                    .sort((a, b) => (b.month * 10 + b.week) - (a.month * 10 + a.week))
+                                    .sort((a, b) => (b.month * 10 + b.round) - (a.month * 10 + a.round))
                                     .slice(0, 3)
                                     .map((m, idx) => (
                                       <p key={idx} className="text-xs text-gray-600">
-                                        <span className="text-gray-400">{m.month}월 {m.week}주:</span> {m.content}
+                                        <span className="text-gray-400">{m.month}월 {m.round}주:</span> {m.content}
                                       </p>
                                     ))
                                   }
@@ -1228,7 +1228,7 @@ const StudentDashboard = ({ students = [], branch }) => {
               📝 성적 입력
             </h3>
             <p className="text-sm text-gray-500 mb-4">
-              <span className="font-semibold text-indigo-600">{scoreModal.studentName}</span> 학생 · {selectedMonth}월 {selectedWeek}주차
+              <span className="font-semibold text-indigo-600">{scoreModal.studentName}</span> 학생 · {selectedMonth}월 {selectedRound}차
             </p>
             
             <div className="space-y-4">

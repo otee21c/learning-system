@@ -8,7 +8,7 @@ import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp
 import { db } from '../../firebase';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
 
-export default function OMRBatchGrading({ exams, students, branch }) {
+export default function OMRBatchGrading({ exams, students, branch, schedules = [] }) {
   // 탭 상태
   const [activeTab, setActiveTab] = useState('scan');
   

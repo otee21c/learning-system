@@ -4,7 +4,7 @@ import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc } from 'firebase
 import { db } from '../../firebase';
 import { getMonthWeek } from '../../utils/dateUtils';
 
-export default function ExamManager({ exams, students, branch }) {
+export default function ExamManager({ exams, students, branch, schedules = [] }) {
   const [newExam, setNewExam] = useState({
     title: '',
     date: '',
@@ -56,7 +56,7 @@ export default function ExamManager({ exams, students, branch }) {
         title: newExam.title,
         date: newExam.date,
         month: month,
-        week: week,
+        round: week,
         subject: newExam.subject,
         totalQuestions: newExam.totalQuestions,
         answers: newExam.answers,
@@ -116,7 +116,7 @@ export default function ExamManager({ exams, students, branch }) {
         title: editingExam.title,
         date: editingExam.date,
         month: month,
-        week: week,
+        round: week,
         subject: editingExam.subject,
         totalQuestions: editingExam.totalQuestions,
         answers: editingExam.answers,
@@ -348,9 +348,9 @@ export default function ExamManager({ exams, students, branch }) {
                             {exam.date} | {exam.subject} | {exam.totalQuestions}문항 | {exam.scores?.reduce((a, b) => a + b, 0) || 0}점
                           </span>
                         )}
-                        {exam.month && exam.week && (
+                        {exam.month && exam.round && (
                           <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-full">
-                            {exam.month}월 {exam.week}주차
+                            {exam.month}월 {exam.round}차
                           </span>
                         )}
                       </div>
