@@ -12,7 +12,7 @@ import {
   doc
 } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { getMonthWeek, getMonthRoundFromSchedules, formatMonthRound } from '../../utils/dateUtils';
+import { getMonthWeek } from '../../utils/dateUtils';
 
 // SMS 발송 함수
 const sendSMS = async (phoneNumber, message) => {
@@ -69,7 +69,7 @@ const isLateSubmission = (dueDate, submittedAt) => {
 
 // 과제 관리 컴포넌트
 
-const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }) => {
+const HomeworkManager = ({ students: propStudents = [], branch }) => {
   const [assignments, setAssignments] = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -89,7 +89,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
   const [viewMode, setViewMode] = useState('assignments'); // 'assignments' | 'overview'
   const [allSubmissions, setAllSubmissions] = useState([]);
   const [overviewMonth, setOverviewMonth] = useState(new Date().getMonth() + 1);
-  const [overviewRound, setOverviewRound] = useState(1); // week -> round
+  const [overviewWeek, setOverviewWeek] = useState(1);
   
   // ★ 미제출자 필터 및 발송 관련
   const [showNotSubmittedOnly, setShowNotSubmittedOnly] = useState(false);
@@ -160,7 +160,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
     return allSubmissions.some(s => 
       s.studentId === studentId && 
       s.month === overviewMonth && 
-      s.round === overviewRound &&
+      s.week === overviewWeek &&
       s.taskCode === taskCode
     );
   };
@@ -171,7 +171,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
       const existing = allSubmissions.find(s => 
         s.studentId === studentId && 
         s.month === overviewMonth && 
-        s.round === overviewRound &&
+        s.week === overviewWeek &&
         s.taskCode === taskCode
       );
       
@@ -186,7 +186,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
           studentId,
           studentName: student?.name || '',
           month: overviewMonth,
-          round: overviewRound,
+          week: overviewWeek,
           taskCode,
           submitted: true,
           submittedAt: serverTimestamp(),
@@ -235,7 +235,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
     if (sendToParentBulk) targetType.push('학부모');
 
     if (!window.confirm(
-      `[${overviewMonth}월 ${overviewRound}차 - ${taskName}]\n` +
+      `[${overviewMonth}월 ${overviewWeek}주차 - ${taskName}]\n` +
       `미제출자 ${targetCount}명에게 ${targetType.join(', ')}에게 문자를 발송하시겠습니까?`
     )) {
       return;
@@ -371,14 +371,14 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
           updatedAt: serverTimestamp()
         });
       } else {
-        // 새 기록 생성 - 차수 일정 사용
-        const { month, round } = getMonthRoundFromSchedules(selectedAssignment.dueDate, schedules);
+        // 새 기록 생성
+        const { month, week } = getMonthWeek(selectedAssignment.dueDate);
         await addDoc(collection(db, 'homeworkSubmissions'), {
           homeworkId: selectedAssignment.id,
           studentId: studentId,
           studentName: studentName,
           month: month,
-          round: round,
+          week: week,
           manualStatus: status,  // 수동 상태
           submitted: false,
           submittedAt: serverTimestamp()
@@ -403,13 +403,12 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
     }
 
     try {
-      // 차수 일정 사용
-      const { month, round } = getMonthRoundFromSchedules(newAssignment.dueDate, schedules);
+      const { month, week } = getMonthWeek(newAssignment.dueDate);
       
       await addDoc(collection(db, 'assignments'), {
         ...newAssignment,
         month: month,
-        round: round,
+        week: week,
         taskCode: newAssignment.taskCode || '',
         sendToStudent: newAssignment.sendToStudent,   // ★ 발송 대상
         sendToParent: newAssignment.sendToParent,     // ★ 발송 대상
@@ -610,12 +609,12 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
               ))}
             </select>
             <select
-              value={overviewRound}
-              onChange={(e) => setOverviewRound(Number(e.target.value))}
+              value={overviewWeek}
+              onChange={(e) => setOverviewWeek(Number(e.target.value))}
               className="px-3 py-2 border rounded-lg"
             >
-              {[1,2,3,4,5].map(r => (
-                <option key={r} value={r}>{r}차</option>
+              {[1,2,3,4,5].map(w => (
+                <option key={w} value={w}>{w}주차</option>
               ))}
             </select>
             {branch && (
@@ -989,7 +988,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
                       코드: {assignment.taskCode}
                     </span>
                   )}
-                  {assignment.month && (assignment.round || assignment.week) && (
+                  {assignment.month && assignment.week && (
                     <span style={{
                       padding: '4px 12px',
                       backgroundColor: '#fef3c7',
@@ -998,7 +997,7 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
                       fontWeight: 'bold',
                       borderRadius: '12px'
                     }}>
-                      {assignment.month}월 {assignment.round ? `${assignment.round}차` : `${assignment.week}주차`}
+                      {assignment.month}월 {assignment.week}주차
                     </span>
                   )}
                   {/* ★ 마감 여부 표시 */}

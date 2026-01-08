@@ -2,13 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Upload, FileText, Trash2, Save, X, 
   ChevronDown, ChevronUp, Camera, AlertCircle, Loader2,
-  CheckCircle, File, Printer, Download, Edit3, List
+  CheckCircle, File, Printer, Download, Edit3, List, Crosshair
 } from 'lucide-react';
 import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy, query } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { getTodayMonthWeek, getMonthWeek } from '../../utils/dateUtils';
+import { gradeOMRFromBase64, formatResults } from '../../utils/omrCoordinates';
 
-export default function OMRBatchGrading({ exams, students, branch, schedules = [] }) {
+export default function OMRBatchGrading({ exams, students, branch }) {
   // 탭 상태
   const [activeTab, setActiveTab] = useState('scan');
   
@@ -22,6 +23,9 @@ export default function OMRBatchGrading({ exams, students, branch, schedules = [
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  
+  // 스캔 모드: 'vision' (Claude Vision) 또는 'coordinate' (좌표 기반)
+  const [scanMode, setScanMode] = useState('coordinate');
   
   // 수정 모드
   const [editingIndex, setEditingIndex] = useState(null);
@@ -194,6 +198,68 @@ export default function OMRBatchGrading({ exams, students, branch, schedules = [
     
     setScanResults(results);
     setIsScanning(false);
+  };
+
+  // 좌표 기반 OMR 인식 (빠르고 정확)
+  const scanOMRWithCoordinates = async () => {
+    if (!selectedExam) { alert('시험을 선택해주세요.'); return; }
+    if (pdfPages.length === 0) { alert('PDF를 업로드해주세요.'); return; }
+
+    setIsScanning(true);
+    setScanProgress({ current: 0, total: pdfPages.length });
+    
+    const results = [];
+    
+    for (let i = 0; i < pdfPages.length; i++) {
+      setScanProgress({ current: i + 1, total: pdfPages.length });
+      
+      try {
+        // 좌표 기반 채점
+        const gradeResult = await gradeOMRFromBase64(pdfPages[i].base64);
+        
+        // answers 객체를 배열로 변환 (1번부터 순서대로)
+        const answersArray = [];
+        for (let q = 1; q <= selectedExam.totalQuestions; q++) {
+          answersArray.push(gradeResult.answers[q] || 0);
+        }
+        
+        results.push({
+          studentName: '', // 좌표 기반은 이름 인식 안 함 - 수동 입력 필요
+          birthDate: '',
+          selectedSubject: '화작',
+          answers: answersArray,
+          pageIndex: i,
+          pageNum: pdfPages[i].pageNum,
+          matchedStudentId: '',
+          // 좌표 기반 추가 정보
+          scanMethod: 'coordinate',
+          confidence: gradeResult.details?.map(d => d.confidence) || []
+        });
+      } catch (error) {
+        console.error('좌표 기반 스캔 오류:', error);
+        results.push({
+          error: true,
+          pageIndex: i,
+          pageNum: pdfPages[i].pageNum,
+          studentName: '',
+          birthDate: '',
+          matchedStudentId: '',
+          answers: Array(selectedExam.totalQuestions).fill(0)
+        });
+      }
+    }
+    
+    setScanResults(results);
+    setIsScanning(false);
+  };
+
+  // 통합 스캔 함수 (모드에 따라 분기)
+  const scanOMR = async () => {
+    if (scanMode === 'coordinate') {
+      await scanOMRWithCoordinates();
+    } else {
+      await scanOMRWithVision();
+    }
   };
 
   const findMatchingStudent = (name) => {
@@ -875,9 +941,31 @@ export default function OMRBatchGrading({ exams, students, branch, schedules = [
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span>추출된 OMR ({pdfPages.length}장)</span>
-                <button onClick={scanOMRWithVision} disabled={isScanning || !selectedExam} className="px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
-                  {isScanning ? <><Loader2 className="animate-spin" size={18} />{scanProgress.current}/{scanProgress.total}</> : <><Camera size={18} />AI 인식</>}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* 스캔 모드 선택 */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setScanMode('coordinate')}
+                      className={`px-3 py-1 rounded text-sm flex items-center gap-1 ${scanMode === 'coordinate' ? 'bg-white shadow text-indigo-600' : 'text-gray-600'}`}
+                    >
+                      <Crosshair size={14} />좌표
+                    </button>
+                    <button
+                      onClick={() => setScanMode('vision')}
+                      className={`px-3 py-1 rounded text-sm flex items-center gap-1 ${scanMode === 'vision' ? 'bg-white shadow text-indigo-600' : 'text-gray-600'}`}
+                    >
+                      <Camera size={14} />AI
+                    </button>
+                  </div>
+                  {/* 스캔 버튼 */}
+                  <button onClick={scanOMR} disabled={isScanning || !selectedExam} className="px-4 py-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-2">
+                    {isScanning ? (
+                      <><Loader2 className="animate-spin" size={18} />{scanProgress.current}/{scanProgress.total}</>
+                    ) : (
+                      <>{scanMode === 'coordinate' ? <Crosshair size={18} /> : <Camera size={18} />}{scanMode === 'coordinate' ? '좌표 인식' : 'AI 인식'}</>
+                    )}
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-4 gap-4">
                 {pdfPages.map((page, i) => (
@@ -887,6 +975,12 @@ export default function OMRBatchGrading({ exams, students, branch, schedules = [
                   </div>
                 ))}
               </div>
+              {/* 스캔 모드 설명 */}
+              <p className="text-xs text-gray-500">
+                {scanMode === 'coordinate' 
+                  ? '💡 좌표 인식: 빠르고 정확하지만 이름은 수동 입력 필요' 
+                  : '💡 AI 인식: 이름/생년월일 자동 인식, 다소 느림'}
+              </p>
             </div>
           )}
 

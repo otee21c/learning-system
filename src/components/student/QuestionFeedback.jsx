@@ -57,13 +57,6 @@ const QuestionFeedback = ({ currentUser }) => {
         ...doc.data()
       }));
       
-      // ★ 지점별 필터링 (branch가 없거나 현재 학생 지점과 일치하는 것만)
-      const studentBranch = currentUser?.branch || 'gwangjin';
-      materialList = materialList.filter(m => {
-        const materialBranch = m.branch || 'gwangjin';
-        return materialBranch === studentBranch;
-      });
-      
       // 학생 학년에 맞는 자료만 필터링 (선택사항)
       // 일단은 모든 자료를 보여주되, 같은 학년 자료를 우선 표시
       if (studentGrade) {

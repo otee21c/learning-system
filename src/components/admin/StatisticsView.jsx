@@ -4,11 +4,11 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-export default function StatisticsView({ students, exams, branch, schedules = [] }) {
-  // 월/차 선택 (기본값: 현재 월/차)
+export default function StatisticsView({ students, exams, branch }) {
+  // 월/주차 선택 (기본값: 현재 월/주차)
   const todayMonthWeek = getTodayMonthWeek();
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
-  const [selectedRound, setSelectedWeek] = useState(todayMonthWeek.round);
+  const [selectedWeek, setSelectedWeek] = useState(todayMonthWeek.week);
   
   // 시험 종류 필터
   const [selectedExamType, setSelectedExamType] = useState('all');
@@ -25,19 +25,19 @@ export default function StatisticsView({ students, exams, branch, schedules = []
   // 삭제 확인
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { studentId, examIndex }
 
-  // 선택한 월/차에 해당하는 시험만 필터링
+  // 선택한 월/주차에 해당하는 시험만 필터링
   const filteredExams = exams.filter(exam => 
-    exam.month === selectedMonth && exam.round === selectedRound
+    exam.month === selectedMonth && exam.week === selectedWeek
   );
   
-  // 선택한 월/차의 시험 ID 목록
+  // 선택한 월/주차의 시험 ID 목록
   const filteredExamIds = filteredExams.map(exam => exam.id);
   
-  // 학생 데이터를 필터링 (선택한 월/차의 시험만 포함)
+  // 학생 데이터를 필터링 (선택한 월/주차의 시험만 포함)
   const filteredStudents = students.map(student => {
     let studentExams = student.exams?.filter(exam => 
       filteredExamIds.includes(exam.examId) ||
-      (exam.manualEntry && exam.month === selectedMonth && exam.round === selectedRound)
+      (exam.manualEntry && exam.month === selectedMonth && exam.week === selectedWeek)
     ) || [];
     
     // 시험 종류 필터 적용
@@ -59,7 +59,7 @@ export default function StatisticsView({ students, exams, branch, schedules = []
     students.flatMap(s => s.exams || [])
       .filter(e => 
         filteredExamIds.includes(e.examId) ||
-        (e.manualEntry && e.month === selectedMonth && e.round === selectedRound)
+        (e.manualEntry && e.month === selectedMonth && e.week === selectedWeek)
       )
       .map(e => e.examTitle || e.examType || '기타')
   )];
@@ -145,7 +145,7 @@ export default function StatisticsView({ students, exams, branch, schedules = []
           e.totalScore === originalExam.totalScore &&
           e.date === originalExam.date &&
           e.month === originalExam.month &&
-          e.round === originalExam.round;
+          e.week === originalExam.week;
         
         if (isSameExam) {
           return {
@@ -218,7 +218,7 @@ export default function StatisticsView({ students, exams, branch, schedules = []
           e.totalScore === examToDelete.totalScore &&
           e.date === examToDelete.date &&
           e.month === examToDelete.month &&
-          e.round === examToDelete.round;
+          e.week === examToDelete.week;
         return !isSameExam;
       });
       
@@ -255,7 +255,7 @@ export default function StatisticsView({ students, exams, branch, schedules = []
           학생별 성적 통계
         </h2>
         
-        {/* 월/차 선택 */}
+        {/* 월/주차 선택 */}
         <div className="mb-6 p-6 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl">
           <h3 className="font-bold text-lg mb-4 text-gray-800">조회 기간 선택</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -272,14 +272,14 @@ export default function StatisticsView({ students, exams, branch, schedules = []
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">차 선택</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">주차 선택</label>
               <select
-                value={selectedRound}
+                value={selectedWeek}
                 onChange={(e) => setSelectedWeek(parseInt(e.target.value))}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               >
                 {[1, 2, 3, 4, 5].map(week => (
-                  <option key={week} value={week}>{week}차</option>
+                  <option key={week} value={week}>{week}주차</option>
                 ))}
               </select>
             </div>
@@ -299,7 +299,7 @@ export default function StatisticsView({ students, exams, branch, schedules = []
           </div>
           <div className="mt-3 text-sm text-gray-600 bg-white p-3 rounded-lg flex items-center gap-2">
             <Filter size={16} className="text-indigo-500" />
-            <span>선택된 기간: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedRound}차</span></span>
+            <span>선택된 기간: <span className="font-semibold text-indigo-600">{selectedMonth}월 {selectedWeek}주차</span></span>
             {selectedExamType !== 'all' && (
               <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
                 {selectedExamType}
@@ -527,8 +527,8 @@ export default function StatisticsView({ students, exams, branch, schedules = []
             <div className="inline-block p-6 bg-gray-100 rounded-full mb-4">
               <BarChart3 className="text-gray-400" size={48} />
             </div>
-            <p className="text-gray-500 text-lg">{selectedMonth}월 {selectedRound}차에 응시한 시험 기록이 없습니다.</p>
-            <p className="text-gray-400 text-sm mt-2">다른 월/차를 선택해보세요.</p>
+            <p className="text-gray-500 text-lg">{selectedMonth}월 {selectedWeek}주차에 응시한 시험 기록이 없습니다.</p>
+            <p className="text-gray-400 text-sm mt-2">다른 월/주차를 선택해보세요.</p>
           </div>
         )}
       </div>
