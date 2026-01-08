@@ -196,7 +196,6 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
         const docRef = await addDoc(collection(db, 'homeworkSubmissions'), newSubmission);
         setAllSubmissions(prev => [...prev, { docId: docRef.id, ...newSubmission }]);
       }
-      }
     } catch (error) {
       console.error('과제 코드 토글 실패:', error);
     }
