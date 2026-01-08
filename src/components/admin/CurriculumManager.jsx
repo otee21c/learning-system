@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { getMonthWeek, getTodayMonthWeek } from '../../utils/dateUtils';
+import { getMonthWeek, getTodayMonthWeek, getMonthRoundFromSchedules, formatMonthRound } from '../../utils/dateUtils';
 import { ChevronDown, ChevronUp, Filter, Calendar, Users } from 'lucide-react';
 
-const CurriculumManager = ({ students = [], branch }) => {
+const CurriculumManager = ({ students = [], branch, schedules = [] }) => {
   const [curriculums, setCurriculums] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingCurriculum, setEditingCurriculum] = useState(null);
   const [formData, setFormData] = useState({
-    weekNumber: '',
+    roundNumber: '',  // roundNumber -> roundNumber
     title: '',
     description: '',
     topics: '',
@@ -22,7 +22,7 @@ const CurriculumManager = ({ students = [], branch }) => {
   // 필터 상태
   const todayMonthWeek = getTodayMonthWeek();
   const [filterMonth, setFilterMonth] = useState(todayMonthWeek.month);
-  const [filterWeek, setFilterWeek] = useState('all');
+  const [filterRound, setFilterRound] = useState('all');  // filterRound -> filterRound
   const [filterGrade, setFilterGrade] = useState('all');
 
   // 펼침/접힘 상태
@@ -37,7 +37,7 @@ const CurriculumManager = ({ students = [], branch }) => {
 
   const loadCurriculums = async () => {
     try {
-      const q = query(collection(db, 'curriculums'), orderBy('weekNumber', 'asc'));
+      const q = query(collection(db, 'curriculums'), orderBy('roundNumber', 'asc'));
       const querySnapshot = await getDocs(q);
       const curriculumList = querySnapshot.docs.map(doc => ({
         id: doc.id,
@@ -55,8 +55,8 @@ const CurriculumManager = ({ students = [], branch }) => {
     // 월 필터
     if (filterMonth !== 'all' && c.month !== filterMonth) return false;
     
-    // 주차 필터
-    if (filterWeek !== 'all' && c.weekNumber !== parseInt(filterWeek)) return false;
+    // 차 필터
+    if (filterRound !== 'all' && c.roundNumber !== parseInt(filterRound)) return false;
     
     // 학년 필터 (해당 학년 학생이 포함된 커리큘럼만)
     if (filterGrade !== 'all') {
@@ -95,8 +95,8 @@ const CurriculumManager = ({ students = [], branch }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.weekNumber || !formData.title) {
-      alert('주차와 제목은 필수입니다.');
+    if (!formData.roundNumber || !formData.title) {
+      alert('차와 제목은 필수입니다.');
       return;
     }
 
@@ -110,7 +110,7 @@ const CurriculumManager = ({ students = [], branch }) => {
       const { month } = getMonthWeek(dateForMonth);
       
       const curriculumData = {
-        weekNumber: parseInt(formData.weekNumber),
+        roundNumber: parseInt(formData.roundNumber),
         month: month,
         title: formData.title,
         description: formData.description,
@@ -132,7 +132,7 @@ const CurriculumManager = ({ students = [], branch }) => {
       }
 
       setFormData({
-        weekNumber: '',
+        roundNumber: '',
         title: '',
         description: '',
         topics: '',
@@ -154,7 +154,7 @@ const CurriculumManager = ({ students = [], branch }) => {
   const handleEdit = (curriculum) => {
     setEditingCurriculum(curriculum);
     setFormData({
-      weekNumber: curriculum.weekNumber.toString(),
+      roundNumber: curriculum.roundNumber.toString(),
       title: curriculum.title,
       description: curriculum.description || '',
       topics: curriculum.topics?.join(', ') || '',
@@ -191,7 +191,7 @@ const CurriculumManager = ({ students = [], branch }) => {
             setShowForm(!showForm);
             setEditingCurriculum(null);
             setFormData({
-              weekNumber: '',
+              roundNumber: '',
               title: '',
               description: '',
               topics: '',
@@ -220,11 +220,11 @@ const CurriculumManager = ({ students = [], branch }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">주차 번호 *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">차 번호 *</label>
                 <input
                   type="number"
-                  value={formData.weekNumber}
-                  onChange={(e) => setFormData({ ...formData, weekNumber: e.target.value })}
+                  value={formData.roundNumber}
+                  onChange={(e) => setFormData({ ...formData, roundNumber: e.target.value })}
                   placeholder="예: 5"
                   required
                   className="w-full p-3 border border-gray-300 rounded-lg"
@@ -417,16 +417,16 @@ const CurriculumManager = ({ students = [], branch }) => {
             </select>
           </div>
 
-          {/* 주차 필터 */}
+          {/* 차 필터 */}
           <div className="flex items-center gap-2">
             <select
-              value={filterWeek}
+              value={filterRound}
               onChange={(e) => setFilterWeek(e.target.value)}
               className="p-2 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="all">전체 주차</option>
+              <option value="all">전체 차</option>
               {[1,2,3,4,5].map(w => (
-                <option key={w} value={w}>{w}주차</option>
+                <option key={w} value={w}>{w}차</option>
               ))}
             </select>
           </div>
@@ -495,7 +495,7 @@ const CurriculumManager = ({ students = [], branch }) => {
                 >
                   <div className="flex items-center gap-3 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">{curriculum.weekNumber}주차</span>
+                      <span className="text-sm text-gray-500">{curriculum.roundNumber}차</span>
                       {curriculum.month && (
                         <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
                           {curriculum.month}월

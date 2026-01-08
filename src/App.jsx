@@ -51,12 +51,13 @@ export default function App() {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [showBranchSelector, setShowBranchSelector] = useState(false);
 
-  // 전역 데이터 (모든 컴포넌트에서 필요한 것만)
-  const [allStudents, setAllStudents] = useState([]); // 전체 학생
-  const [students, setStudents] = useState([]); // 필터링된 학생
+  // 전역 데이터
+  const [allStudents, setAllStudents] = useState([]);
+  const [students, setStudents] = useState([]);
   const [exams, setExams] = useState([]);
   const [homeworks, setHomeworks] = useState([]);
   const [videos, setVideos] = useState([]);
+  const [roundSchedules, setRoundSchedules] = useState([]); // 차수 일정
 
   // Firebase 인증 상태 감지
   useEffect(() => {
@@ -65,7 +66,6 @@ export default function App() {
         const email = user.email;
         const userId = email ? email.split('@')[0] : user.uid;
         
-        // Firestore에서 사용자 정보 가져오기
         const studentsRef = collection(db, 'students');
         const snapshot = await getDocs(studentsRef);
         const studentDoc = snapshot.docs.find(doc => doc.data().id === userId);
@@ -77,14 +77,13 @@ export default function App() {
             id: studentData.id, 
             name: studentData.name, 
             exams: studentData.exams || [],
-            branch: studentData.branch || 'gwangjin' // 학생의 지점
+            branch: studentData.branch || 'gwangjin'
           });
           setSelectedBranch(studentData.branch || 'gwangjin');
-          setActiveTab('exam'); // 학생은 시험 탭으로
+          setActiveTab('exam');
         } else {
           if (email === 'admin@test.com') {
             setCurrentUser({ type: 'admin', name: '관리자' });
-            // 관리자는 지점 선택 화면 표시
             setShowBranchSelector(true);
             setActiveTab('dashboard');
           } else {
@@ -109,31 +108,33 @@ export default function App() {
   useEffect(() => {
     if (!currentUser) return;
 
-    // 학생 데이터 (docId: Firebase 문서 ID, id: 학생 ID)
     const unsubStudents = onSnapshot(collection(db, 'students'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ 
-        docId: doc.id,  // Firebase 문서 ID (수정/삭제에 사용)
-        ...doc.data()   // 학생 데이터 (id: 학생 ID 포함)
+        docId: doc.id,
+        ...doc.data()
       }));
       setAllStudents(data);
     });
 
-    // 시험 데이터
     const unsubExams = onSnapshot(collection(db, 'exams'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (data.length > 0) setExams(data);
     });
 
-    // 숙제 데이터
     const unsubHomeworks = onSnapshot(collection(db, 'assignments'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setHomeworks(data);
     });
 
-    // 동영상 데이터
     const unsubVideos = onSnapshot(collection(db, 'videos'), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (data.length > 0) setVideos(data);
+    });
+
+    // 차수 일정 로드
+    const unsubSchedules = onSnapshot(collection(db, 'roundSchedules'), (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRoundSchedules(data);
     });
 
     return () => {
@@ -141,6 +142,7 @@ export default function App() {
       unsubExams();
       unsubHomeworks();
       unsubVideos();
+      unsubSchedules();
     };
   }, [currentUser]);
 
@@ -148,7 +150,6 @@ export default function App() {
   useEffect(() => {
     if (selectedBranch && allStudents.length > 0) {
       const filtered = allStudents.filter(s => {
-        // branch가 없는 기존 학생은 '광진'으로 처리
         const studentBranch = s.branch || 'gwangjin';
         return studentBranch === selectedBranch;
       });
@@ -158,13 +159,18 @@ export default function App() {
     }
   }, [selectedBranch, allStudents]);
 
-  // 지점 선택
+  // 지점별 차수 일정 필터링
+  const filteredSchedules = roundSchedules.filter(s => {
+    const scheduleBranch = s.branch || 'gwangjin';
+    const currentBranch = selectedBranch || 'gwangjin';
+    return scheduleBranch === currentBranch;
+  });
+
   const handleSelectBranch = (branchId) => {
     setSelectedBranch(branchId);
     setShowBranchSelector(false);
   };
 
-  // 로그아웃
   const handleLogout = async () => {
     await signOut(auth);
     setCurrentUser(null);
@@ -173,7 +179,6 @@ export default function App() {
     setActiveTab('dashboard');
   };
 
-  // 현재 선택된 지점 정보
   const currentBranch = BRANCHES.find(b => b.id === selectedBranch);
 
   if (loading) {
@@ -191,7 +196,6 @@ export default function App() {
     return <LoginForm />;
   }
 
-  // 관리자 지점 선택 화면
   if (currentUser.type === 'admin' && showBranchSelector) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center p-4">
@@ -243,7 +247,6 @@ export default function App() {
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   오늘의 국어 연구소
                 </h1>
-                {/* 지점 표시 (관리자용) */}
                 {currentUser.type === 'admin' && currentBranch && (
                   <button
                     onClick={() => setShowBranchSelector(true)}
@@ -293,19 +296,19 @@ export default function App() {
           {/* 관리자 탭 */}
           {currentUser.type === 'admin' && (
             <>
-              {activeTab === 'dashboard' && <StudentDashboard students={students} branch={selectedBranch} />}
+              {activeTab === 'dashboard' && <StudentDashboard students={students} branch={selectedBranch} schedules={filteredSchedules} />}
               {activeTab === 'students' && <StudentManager students={students} branch={selectedBranch} />}
-              {activeTab === 'exams' && <ExamManager exams={exams} students={students} branch={selectedBranch} />}
+              {activeTab === 'exams' && <ExamManager exams={exams} students={students} branch={selectedBranch} schedules={filteredSchedules} />}
               {activeTab === 'videos' && <VideoManager videos={videos} students={students} branch={selectedBranch} />}
-              {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} branch={selectedBranch} />}
-              {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} branch={selectedBranch} />}
-              {activeTab === 'homework' && <HomeworkManager students={students} branch={selectedBranch} />}
+              {activeTab === 'omr' && <OMRBatchGrading exams={exams} students={students} branch={selectedBranch} schedules={filteredSchedules} />}
+              {activeTab === 'statistics' && <StatisticsView students={students} exams={exams} branch={selectedBranch} schedules={filteredSchedules} />}
+              {activeTab === 'homework' && <HomeworkManager students={students} branch={selectedBranch} schedules={filteredSchedules} />}
               {activeTab === 'workbook-analysis' && <WorkbookAnalysisManager students={students} branch={selectedBranch} />}
               {activeTab === 'question-manager' && <QuestionManager branch={selectedBranch} />}
               {activeTab === 'notification' && <NotificationManager students={students} branch={selectedBranch} />}
-              {activeTab === 'curriculum' && <CurriculumManager students={students} branch={selectedBranch} />}
-              {activeTab === 'attendance' && <AttendanceManager students={students} branch={selectedBranch} />}
-              {activeTab === 'report' && <ReportGenerator students={students} branch={selectedBranch} />}
+              {activeTab === 'curriculum' && <CurriculumManager students={students} branch={selectedBranch} schedules={filteredSchedules} />}
+              {activeTab === 'attendance' && <AttendanceManager students={students} branch={selectedBranch} schedules={filteredSchedules} />}
+              {activeTab === 'report' && <ReportGenerator students={students} branch={selectedBranch} schedules={filteredSchedules} />}
               {activeTab === 'problem-solver' && <ProblemSolver />}
               {activeTab === 'learning-materials' && <LearningMaterialManager branch={selectedBranch} />}
             </>
@@ -315,7 +318,11 @@ export default function App() {
           {currentUser.type === 'student' && (
             <>
               {activeTab === 'exam' && <ExamTaking currentUser={currentUser} exams={exams} />}
-              {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks} />}
+              {activeTab === 'homework' && <HomeworkSubmission currentUser={currentUser} homeworks={homeworks.filter(h => {
+                const homeworkBranch = h.branch || 'gwangjin';
+                const studentBranch = currentUser.branch || 'gwangjin';
+                return homeworkBranch === studentBranch;
+              })} />}
               {activeTab === 'video-learning' && <VideoLearning currentUser={currentUser} />}
               {activeTab === 'concept-question' && <ConceptQuestion currentUser={currentUser} />}
               {activeTab === 'problem-solving' && <ProblemSolving currentUser={currentUser} />}

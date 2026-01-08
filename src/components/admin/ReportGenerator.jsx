@@ -5,7 +5,7 @@ import { FileText, Download, Image, Calendar, User, ChevronDown, ChevronUp, Save
 import html2canvas from 'html2canvas';
 import { getTodayMonthWeek } from '../../utils/dateUtils';
 
-const ReportGenerator = ({ students = [], branch }) => {
+const ReportGenerator = ({ students = [], branch, schedules = [] }) => {
   const reportRef = useRef(null);
   const todayMonthWeek = getTodayMonthWeek();
 
@@ -22,7 +22,7 @@ const ReportGenerator = ({ students = [], branch }) => {
   const [startMonth, setStartMonth] = useState(todayMonthWeek.month);
   const [startWeek, setStartWeek] = useState(1);
   const [endMonth, setEndMonth] = useState(todayMonthWeek.month);
-  const [endWeek, setEndWeek] = useState(todayMonthWeek.week);
+  const [endWeek, setEndWeek] = useState(todayMonthWeek.round);
 
   // 학생 선택
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -150,14 +150,14 @@ const ReportGenerator = ({ students = [], branch }) => {
     }
   }, [selectedStudentId, students, savedDiagnoses, periodMode, selectedMonth, startMonth, startWeek, endMonth, endWeek]);
 
-  // 기간 내 주차 목록 생성
+  // 기간 내 차 목록 생성
   const getWeeksInPeriod = () => {
     const weeks = [];
     
     if (periodMode === 'monthly') {
-      // 월별: 해당 월의 1~5주차
+      // 월별: 해당 월의 1~5차
       for (let w = 1; w <= 5; w++) {
-        weeks.push({ month: selectedMonth, week: w });
+        weeks.push({ month: selectedMonth, round: w });
       }
     } else {
       // 과정별: 시작~종료 범위
@@ -168,7 +168,7 @@ const ReportGenerator = ({ students = [], branch }) => {
         currentMonth < endMonth || 
         (currentMonth === endMonth && currentWeek <= endWeek)
       ) {
-        weeks.push({ month: currentMonth, week: currentWeek });
+        weeks.push({ month: currentMonth, round: currentWeek });
         
         currentWeek++;
         if (currentWeek > 5) {
@@ -199,7 +199,7 @@ const ReportGenerator = ({ students = [], branch }) => {
     // 출결 계산
     const periodAttendance = attendanceList.filter(a => 
       a.studentId === selectedStudentId &&
-      weeks.some(w => w.month === a.month && w.week === a.week)
+      weeks.some(w => w.month === a.month && w.round === a.round)
     );
     
     const totalAttendance = periodAttendance.length;
@@ -210,35 +210,35 @@ const ReportGenerator = ({ students = [], branch }) => {
       ? Math.round((presentCount / totalAttendance) * 100) 
       : 0;
 
-    // 주차별 데이터 수집
+    // 차별 데이터 수집
     const weeklyData = weeks.map(({ month, week }) => {
-      // 해당 주차 커리큘럼
+      // 해당 차 커리큘럼
       const weekCurriculum = curriculums.find(c => 
         c.month === month && 
-        c.weekNumber === week &&
+        c.roundNumber === week &&
         c.students?.includes(selectedStudentId)
       );
 
-      // 해당 주차 메모
+      // 해당 차 메모
       const weekMemo = studentMemos.find(m => 
         m.studentId === selectedStudentId &&
         m.month === month &&
-        m.week === week
+        m.round === week
       );
 
-      // 해당 주차 시험 성적 (학생 데이터에서)
+      // 해당 차 시험 성적 (학생 데이터에서)
       const studentExams = selectedStudent?.exams || [];
       const weekExams = studentExams.filter(exam => {
         // 수동 입력 성적은 month/week 필드로 매칭
         if (exam.manualEntry) {
-          return exam.month === month && exam.week === week;
+          return exam.month === month && exam.round === week;
         }
         
         // 시험 관리에서 등록된 성적은 날짜로 계산
         if (!exam.date) return false;
         const examDate = new Date(exam.date);
         const examMonth = examDate.getMonth() + 1;
-        // 주차 계산 (대략적)
+        // 차 계산 (대략적)
         const examWeek = Math.ceil(examDate.getDate() / 7);
         return examMonth === month && examWeek === week;
       });
@@ -253,7 +253,7 @@ const ReportGenerator = ({ students = [], branch }) => {
       };
     });
 
-    // 데이터가 있는 주차만 필터링 (선택적)
+    // 데이터가 있는 차만 필터링 (선택적)
     const filteredWeeklyData = weeklyData.filter(w => 
       w.curriculum !== '-' || w.memo !== '-' || w.exams.length > 0
     );
@@ -662,7 +662,7 @@ const ReportGenerator = ({ students = [], branch }) => {
     if (periodMode === 'monthly') {
       return `${selectedMonth}월`;
     } else {
-      return `${startMonth}월${startWeek}주차~${endMonth}월${endWeek}주차`;
+      return `${startMonth}월${startWeek}차~${endMonth}월${endWeek}차`;
     }
   };
 
@@ -671,7 +671,7 @@ const ReportGenerator = ({ students = [], branch }) => {
     if (periodMode === 'monthly') {
       return `${selectedMonth}월 퍼스널 진단 리포트`;
     } else {
-      return `${startMonth}월 ${startWeek}주차 ~ ${endMonth}월 ${endWeek}주차 퍼스널 진단 리포트`;
+      return `${startMonth}월 ${startWeek}차 ~ ${endMonth}월 ${endWeek}차 퍼스널 진단 리포트`;
     }
   };
 
@@ -770,7 +770,7 @@ const ReportGenerator = ({ students = [], branch }) => {
                   <option key={m} value={m}>{m}월</option>
                 ))}
               </select>
-              <span className="text-gray-600">전체 주차</span>
+              <span className="text-gray-600">전체 차</span>
             </div>
           )}
 
@@ -793,7 +793,7 @@ const ReportGenerator = ({ students = [], branch }) => {
                   className="p-2 border border-gray-300 rounded-lg"
                 >
                   {[1,2,3,4,5].map(w => (
-                    <option key={w} value={w}>{w}주차</option>
+                    <option key={w} value={w}>{w}차</option>
                   ))}
                 </select>
               </div>
@@ -816,7 +816,7 @@ const ReportGenerator = ({ students = [], branch }) => {
                   className="p-2 border border-gray-300 rounded-lg"
                 >
                   {[1,2,3,4,5].map(w => (
-                    <option key={w} value={w}>{w}주차</option>
+                    <option key={w} value={w}>{w}차</option>
                   ))}
                 </select>
               </div>
@@ -1011,27 +1011,27 @@ const ReportGenerator = ({ students = [], branch }) => {
                   </div>
                 </div>
 
-                {/* 주차별 수업 내용 */}
+                {/* 차별 수업 내용 */}
                 <div>
                   <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                    📚 주차별 수업 내용
+                    📚 차별 수업 내용
                   </h2>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold" style={{ width: '60px' }}>주차</th>
+                          <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold" style={{ width: '60px' }}>차</th>
                           <th className="border border-gray-300 px-2 py-2 text-left text-sm font-semibold" style={{ width: '200px' }}>커리큘럼</th>
                           <th className="border border-gray-300 px-2 py-2 text-center text-sm font-semibold" style={{ width: '100px' }}>성취도</th>
                           <th className="border border-gray-300 px-2 py-2 text-left text-sm font-semibold">수업 메모</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {reportData.weeklyData.map((week, idx) => (
+                        {reportData.roundlyData.map((week, idx) => (
                           <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             <td className="border border-gray-300 px-2 py-2 text-center text-sm font-medium">
                               <div>{week.month}월</div>
-                              <div>{week.week}주차</div>
+                              <div>{week.round}차</div>
                             </td>
                             <td className="border border-gray-300 px-2 py-2 text-sm">
                               <div style={{ wordBreak: 'keep-all', lineHeight: '1.4' }}>

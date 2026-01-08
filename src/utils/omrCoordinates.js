@@ -142,7 +142,7 @@ export function gradeQuestion(imageData, imgWidth, config, questionIndex) {
   // 신뢰도 기준:
   // - 마킹이 확실하려면 가장 어두운 값이 threshold보다 낮아야 함
   // - 그리고 두 번째와 차이가 최소 minConfidence 이상이어야 함
-  const minConfidence = 5; // 최소 신뢰도 차이
+  const minConfidence = 15; // 최소 신뢰도 차이
   
   const isDark = darkestValue < OMR_CONFIG.threshold;
   const isConfident = confidence >= minConfidence;
