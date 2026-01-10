@@ -62,7 +62,12 @@ export default async function handler(req, res) {
               },
               {
                 type: 'text',
-                text: `당신은 한국어 국어 교육 전문가입니다. 이 교재(${workbookName})의 문제들을 분석하여 각 문제의 유형을 분류해주세요.
+                text: `당신은 한국어 국어 교육 전문가입니다. 이 교재(${workbookName})의 문제들을 분석하여 각 문제의 유형과 정답을 분류해주세요.
+
+## 중요: 정답 찾기
+- PDF 뒷부분에 정답표가 있습니다
+- 문제 번호와 정답(1~5)을 매칭해주세요
+- 정답을 찾을 수 없으면 answer는 빈 값("")으로 두세요
 
 ## 유형 분류 체계
 
@@ -96,7 +101,7 @@ export default async function handler(req, res) {
 
 총 ${totalQuestions || 45}개 문제를 분석하고, 아래 형식으로 출력하세요:
 
-{"1":{"type":"독서-정보","subType":"일치불일치"},"2":{"type":"독서-보기","subType":"보기적용"},"3":{"type":"문학-의미","subType":"시어의미"}}`
+{"1":{"type":"독서-정보","subType":"일치불일치","answer":3},"2":{"type":"독서-보기","subType":"보기적용","answer":5},"3":{"type":"문학-의미","subType":"시어의미","answer":2}}`
               }
             ]
           }
