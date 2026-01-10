@@ -107,23 +107,38 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
   const loadSubmissions = async (assignmentId) => {
     try {
       const assignment = assignments.find(a => a.id === assignmentId);
+      if (!assignment) { setSubmissions([]); return; }
+      
+      // 과제의 월/차수를 schedules 기준으로 계산
+      let assignMonth, assignRound;
+      if (assignment.dueDate && schedules.length > 0) {
+        const calc = getMonthRoundFromSchedules(assignment.dueDate, schedules);
+        assignMonth = calc.month;
+        assignRound = calc.round || assignment.round || assignment.week || 1;
+      } else {
+        assignMonth = assignment.month;
+        assignRound = assignment.round || assignment.week || 1;
+      }
+      
       const q = query(collection(db, 'homeworkSubmissions'), orderBy('submittedAt', 'desc'));
       const snapshot = await getDocs(q);
       const allSubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      // homeworkId, assignmentId, 또는 같은 월/차수+taskCode로 매칭
+      // 매칭 조건: ID 직접 매칭 또는 taskCode+월/차수 매칭
       const filtered = allSubs.filter(sub => {
-        // 직접 ID 매칭
+        // 1. 직접 ID 매칭
         if (sub.homeworkId === assignmentId || sub.assignmentId === assignmentId) return true;
-        // taskCode + 월/차수 매칭
-        if (assignment?.taskCode && sub.taskCode === assignment.taskCode) {
+        
+        // 2. taskCode + 월/차수 매칭
+        if (assignment.taskCode && sub.taskCode === assignment.taskCode) {
           const subRound = sub.round || sub.week;
-          const assignRound = assignment.round || assignment.week;
-          if (sub.month === assignment.month && subRound === assignRound) return true;
+          if (sub.month === assignMonth && subRound === assignRound) return true;
         }
+        
         return false;
       });
       
+      console.log('과제:', assignment.title, '월/차수:', assignMonth, assignRound, '제출물:', filtered.length);
       setSubmissions(filtered);
     } catch (error) { console.error('제출 기록 불러오기 실패:', error); }
   };
@@ -180,15 +195,33 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
 
   const selectAssignment = (assignment) => { setSelectedAssignment(assignment); loadSubmissions(assignment.id); };
 
+  // 과제의 월/차수를 schedules 기준으로 계산
+  const getAssignmentMonthRound = (assignment) => {
+    // dueDate가 있으면 schedules에서 찾기
+    if (assignment.dueDate && schedules.length > 0) {
+      const { month, round } = getMonthRoundFromSchedules(assignment.dueDate, schedules);
+      if (round) return { month, round };
+    }
+    // 저장된 값 사용
+    return { 
+      month: assignment.month || new Date().getMonth() + 1, 
+      round: assignment.round || assignment.week || 1 
+    };
+  };
+
   const getFilteredAssignments = () => {
     return assignments.filter(a => {
-      // 유형 필터: 'all'이면 전체, 아니면 해당 유형만 (기존 과제는 homeworkType이 없으면 전체에 포함)
+      // 유형 필터: 'all'이면 전체 (기존 과제는 homeworkType 없으면 모두 표시)
       if (typeFilter !== 'all') {
-        const assignmentType = a.homeworkType || 'other'; // 기존 과제는 'other'로 처리
+        const assignmentType = a.homeworkType || null;
+        // homeworkType이 없는 기존 과제는 '전체'에서만 보임
         if (assignmentType !== typeFilter) return false;
       }
-      if (monthFilter && a.month !== monthFilter) return false;
-      if (roundFilter > 0 && a.round !== roundFilter && a.week !== roundFilter) return false;
+      
+      // 월/차수는 schedules 기준으로 계산
+      const { month, round } = getAssignmentMonthRound(a);
+      if (monthFilter && month !== monthFilter) return false;
+      if (roundFilter > 0 && round !== roundFilter) return false;
       return true;
     });
   };
@@ -197,7 +230,8 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
     const filtered = getFilteredAssignments();
     const grouped = {};
     filtered.forEach(a => {
-      const key = `${a.month}월 ${a.round || a.week || 1}차`;
+      const { month, round } = getAssignmentMonthRound(a);
+      const key = `${month}월 ${round}차`;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(a);
     });
