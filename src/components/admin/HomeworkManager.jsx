@@ -246,13 +246,45 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
 
   const toggleRoundCollapse = (key) => setCollapsedRounds(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // 전체 현황용: 제출물의 실제 월/차수를 schedules 기준으로 계산
+  const getSubmissionMonthRound = (submission) => {
+    // submittedAt 날짜로 schedules에서 찾기
+    if (submission.submittedAt && schedules.length > 0) {
+      let submitDate;
+      if (typeof submission.submittedAt === 'string') {
+        submitDate = new Date(submission.submittedAt);
+      } else if (submission.submittedAt?.seconds) {
+        submitDate = new Date(submission.submittedAt.seconds * 1000);
+      } else {
+        submitDate = new Date(submission.submittedAt);
+      }
+      
+      const { month, round } = getMonthRoundFromSchedules(submitDate, schedules);
+      if (round) return { month, round };
+    }
+    // schedules에서 못 찾으면 저장된 값 사용
+    return { 
+      month: submission.month, 
+      round: submission.round || submission.week 
+    };
+  };
+
   const hasTaskCodeInOverview = (studentId, taskCode) => {
-    return allSubmissions.some(s => s.studentId === studentId && s.month === overviewMonth && (s.round === overviewRound || s.week === overviewRound) && s.taskCode === taskCode);
+    return allSubmissions.some(s => {
+      if (s.studentId !== studentId || s.taskCode !== taskCode) return false;
+      // schedules 기준으로 월/차수 확인
+      const { month, round } = getSubmissionMonthRound(s);
+      return month === overviewMonth && round === overviewRound;
+    });
   };
 
   const toggleTaskCodeInOverview = async (studentId, taskCode) => {
     try {
-      const existing = allSubmissions.find(s => s.studentId === studentId && s.month === overviewMonth && (s.round === overviewRound || s.week === overviewRound) && s.taskCode === taskCode);
+      const existing = allSubmissions.find(s => {
+        if (s.studentId !== studentId || s.taskCode !== taskCode) return false;
+        const { month, round } = getSubmissionMonthRound(s);
+        return month === overviewMonth && round === overviewRound;
+      });
       if (existing) {
         await deleteDoc(doc(db, 'homeworkSubmissions', existing.docId));
         setAllSubmissions(prev => prev.filter(s => s.docId !== existing.docId));

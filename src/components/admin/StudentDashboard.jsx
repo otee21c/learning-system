@@ -344,18 +344,34 @@ const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
     return { text: '미제출', type: 'none', codes: [] };
   };
 
-  // 과제 코드 저장
+  // 과제 코드 저장 - schedules 기준으로 찾기
   const handleTaskCodeChange = async (studentId, taskCode) => {
     if (!taskCode) return;
     
     try {
-      // 기존 해당 월/차 데이터 확인
-      const existing = homeworkData.find(h => 
-        h.studentId === studentId && 
-        h.month === selectedMonth && 
-        h.round === selectedRound &&
-        h.taskCode === taskCode
-      );
+      // 기존 해당 월/차 데이터 확인 - schedules 기준으로 찾기
+      const existing = homeworkData.find(h => {
+        if (h.studentId !== studentId || h.taskCode !== taskCode) return false;
+        
+        if (h.submittedAt && schedules.length > 0) {
+          let submitDate;
+          if (typeof h.submittedAt === 'string') {
+            submitDate = new Date(h.submittedAt);
+          } else if (h.submittedAt?.seconds) {
+            submitDate = new Date(h.submittedAt.seconds * 1000);
+          } else {
+            submitDate = new Date(h.submittedAt);
+          }
+          
+          const { month, round } = getMonthRoundFromSchedules(submitDate, schedules);
+          if (round) {
+            return month === selectedMonth && round === selectedRound;
+          }
+        }
+        
+        const hRound = h.round || h.week;
+        return h.month === selectedMonth && hRound === selectedRound;
+      });
       
       if (existing) {
         // 이미 있으면 삭제 (토글)
@@ -384,14 +400,32 @@ const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
     }
   };
 
-  // 특정 과제 코드 체크 여부
+  // 특정 과제 코드 체크 여부 - schedules 기준으로 매칭
   const hasTaskCode = (studentId, taskCode) => {
-    return homeworkData.some(h => 
-      h.studentId === studentId && 
-      h.month === selectedMonth && 
-      h.round === selectedRound &&
-      h.taskCode === taskCode
-    );
+    return homeworkData.some(h => {
+      if (h.studentId !== studentId || h.taskCode !== taskCode) return false;
+      
+      // submittedAt으로 schedules에서 월/차수 찾기
+      if (h.submittedAt && schedules.length > 0) {
+        let submitDate;
+        if (typeof h.submittedAt === 'string') {
+          submitDate = new Date(h.submittedAt);
+        } else if (h.submittedAt?.seconds) {
+          submitDate = new Date(h.submittedAt.seconds * 1000);
+        } else {
+          submitDate = new Date(h.submittedAt);
+        }
+        
+        const { month, round } = getMonthRoundFromSchedules(submitDate, schedules);
+        if (round) {
+          return month === selectedMonth && round === selectedRound;
+        }
+      }
+      
+      // schedules에서 못 찾으면 저장된 값으로 비교
+      const hRound = h.round || h.week;
+      return h.month === selectedMonth && hRound === selectedRound;
+    });
   };
 
   // 학생별 성적 가져오기 (해당 월/차)
