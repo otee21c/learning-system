@@ -4,12 +4,16 @@ import { db } from '../../firebase';
 import { 
   LayoutDashboard, User, Calendar, BookOpen, FileText, MessageSquare, 
   Check, X, Edit2, Trash2, Save, ChevronDown, ChevronUp, Search,
-  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2, Download
+  CheckCircle, XCircle, Clock, AlertCircle, Plus, Send, Image, BarChart2, Download, Eye
 } from 'lucide-react';
 import { getTodayMonthWeek, getMonthWeek, getMonthRoundFromSchedules, formatMonthRound } from '../../utils/dateUtils';
+import StudentDetailDashboard from './StudentDetailDashboard';
 
 const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
   const todayMonthWeek = getTodayMonthWeek();
+  
+  // ★ 학생 상세 보기 상태
+  const [selectedStudentDetail, setSelectedStudentDetail] = useState(null);
   
   // 필터 상태
   const [selectedMonth, setSelectedMonth] = useState(todayMonthWeek.month);
@@ -880,9 +884,18 @@ const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
                         </td>
 
                         <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{student.name}</p>
-                            <p className="text-xs text-gray-500">{student.grade} · {student.school || '-'}</p>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">{student.name}</p>
+                              <p className="text-xs text-gray-500">{student.grade} · {student.school || '-'}</p>
+                            </div>
+                            <button
+                              onClick={() => setSelectedStudentDetail(student)}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg transition"
+                              title="상세 보기"
+                            >
+                              <Eye size={16} />
+                            </button>
                           </div>
                         </td>
 
@@ -1454,6 +1467,17 @@ const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ★ 학생 상세 대시보드 모달 */}
+      {selectedStudentDetail && (
+        <StudentDetailDashboard
+          student={selectedStudentDetail}
+          onClose={() => setSelectedStudentDetail(null)}
+          selectedMonth={selectedMonth}
+          selectedRound={selectedRound}
+          schedules={schedules}
+        />
       )}
     </div>
   );
