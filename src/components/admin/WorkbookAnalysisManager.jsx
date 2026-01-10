@@ -45,7 +45,9 @@ export default function WorkbookAnalysisManager({ students, branch }) {
   const [wrongAnswerDate, setWrongAnswerDate] = useState(new Date().toISOString().split('T')[0]);
   const [studentSelection, setStudentSelection] = useState('언매');
   const [analysisStudent, setAnalysisStudent] = useState(null);
-  const [analysisPeriod, setAnalysisPeriod] = useState('week');
+  const [analysisPeriod, setAnalysisPeriod] = useState('month'); // 'week', 'month', 'custom'
+  const [analysisMonth, setAnalysisMonth] = useState(new Date().getMonth() + 1); // 월 선택
+  const [analysisRound, setAnalysisRound] = useState(1); // 차수 선택
   const [analysisData, setAnalysisData] = useState(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -214,13 +216,39 @@ export default function WorkbookAnalysisManager({ students, branch }) {
 
   const generateAnalysis = async () => {
     if (!analysisStudent) { setError('분석할 학생을 선택해주세요.'); return; }
+    
     const now = new Date();
-    let startDate = analysisPeriod === 'week' ? new Date(now.getTime() - 7*24*60*60*1000) : new Date(now.getFullYear(), now.getMonth(), 1);
+    let startDate, endDate = now;
+    let periodLabel = '';
+    
+    if (analysisPeriod === 'week') {
+      startDate = new Date(now.getTime() - 7*24*60*60*1000);
+      periodLabel = '최근 1주일';
+    } else if (analysisPeriod === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      periodLabel = '이번 달';
+    } else {
+      // custom: 월/차수 기반
+      periodLabel = `${analysisMonth}월 ${analysisRound}차`;
+    }
+    
     const filteredRecords = wrongAnswerRecords.filter(record => {
       if (record.studentId !== analysisStudent.id) return false;
-      const recordDate = new Date(record.date);
-      return recordDate >= startDate && recordDate <= now;
+      
+      if (analysisPeriod === 'custom') {
+        // 월/차수 기반 필터링 - record에 month/round가 있으면 사용, 없으면 date 기반
+        if (record.month && (record.round || record.week)) {
+          return record.month === analysisMonth && (record.round === analysisRound || record.week === analysisRound);
+        }
+        // date 기반 fallback
+        const recordDate = new Date(record.date);
+        return recordDate.getMonth() + 1 === analysisMonth;
+      } else {
+        const recordDate = new Date(record.date);
+        return recordDate >= startDate && recordDate <= now;
+      }
     });
+    
     if (filteredRecords.length === 0) { setError('해당 기간에 오답 기록이 없습니다.'); return; }
     const typeStats = {}; let totalWrong = 0;
     filteredRecords.forEach(record => {
@@ -228,7 +256,7 @@ export default function WorkbookAnalysisManager({ students, branch }) {
       Object.entries(record.analyzedTypes || {}).forEach(([type, count]) => { typeStats[type] = (typeStats[type] || 0) + count; });
     });
     const sortedTypes = Object.entries(typeStats).sort((a, b) => b[1] - a[1]).map(([type, count]) => ({ type, count, percentage: Math.round((count / totalWrong) * 100) }));
-    setAnalysisData({ student: analysisStudent, period: analysisPeriod, startDate: startDate.toISOString().split('T')[0], endDate: now.toISOString().split('T')[0], totalRecords: filteredRecords.length, totalWrong, typeStats: sortedTypes, weaknesses: sortedTypes.slice(0, 3), records: filteredRecords });
+    setAnalysisData({ student: analysisStudent, period: periodLabel, startDate: analysisPeriod === 'custom' ? `${analysisMonth}월 ${analysisRound}차` : startDate.toISOString().split('T')[0], endDate: analysisPeriod === 'custom' ? '' : now.toISOString().split('T')[0], totalRecords: filteredRecords.length, totalWrong, typeStats: sortedTypes, weaknesses: sortedTypes.slice(0, 3), records: filteredRecords });
   };
 
   const generatePersonalReport = async () => {
@@ -482,7 +510,13 @@ export default function WorkbookAnalysisManager({ students, branch }) {
             <h3 className="text-lg font-bold text-gray-800 mb-4">📊 약점 분석</h3>
             <div className="flex flex-wrap gap-4 items-end">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">학생 선택</label><select value={analysisStudent?.id || ''} onChange={(e) => setAnalysisStudent(students.find(s => s.id === e.target.value))} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="">학생을 선택하세요</option>{students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">분석 기간</label><select value={analysisPeriod} onChange={(e) => setAnalysisPeriod(e.target.value)} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="week">최근 1주일</option><option value="month">이번 달</option></select></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">분석 기간</label><select value={analysisPeriod} onChange={(e) => setAnalysisPeriod(e.target.value)} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500"><option value="week">최근 1주일</option><option value="month">이번 달</option><option value="custom">월/차수 선택</option></select></div>
+              {analysisPeriod === 'custom' && (
+                <>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">월</label><select value={analysisMonth} onChange={(e) => setAnalysisMonth(Number(e.target.value))} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500">{[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}월</option>)}</select></div>
+                  <div><label className="block text-sm font-medium text-gray-700 mb-1">차수</label><select value={analysisRound} onChange={(e) => setAnalysisRound(Number(e.target.value))} className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500">{[1,2,3,4,5].map(r => <option key={r} value={r}>{r}차</option>)}</select></div>
+                </>
+              )}
               <button onClick={generateAnalysis} disabled={!analysisStudent} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50"><BarChart3 size={20} />분석 생성</button>
               {analysisData && (<button onClick={generatePersonalReport} disabled={isGeneratingPdf} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50">{isGeneratingPdf ? <Loader2 className="animate-spin" size={20} /> : <FileDown size={20} />}PDF 리포트</button>)}
             </div>
@@ -491,7 +525,7 @@ export default function WorkbookAnalysisManager({ students, branch }) {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="p-4 bg-blue-50 rounded-xl"><div className="flex items-center gap-2 text-blue-600 mb-2"><User size={20} /><span className="font-medium">학생</span></div><p className="text-2xl font-bold text-blue-800">{analysisData.student.name}</p></div>
-                <div className="p-4 bg-purple-50 rounded-xl"><div className="flex items-center gap-2 text-purple-600 mb-2"><Calendar size={20} /><span className="font-medium">분석 기간</span></div><p className="text-lg font-bold text-purple-800">{analysisData.startDate} ~ {analysisData.endDate}</p></div>
+                <div className="p-4 bg-purple-50 rounded-xl"><div className="flex items-center gap-2 text-purple-600 mb-2"><Calendar size={20} /><span className="font-medium">분석 기간</span></div><p className="text-lg font-bold text-purple-800">{analysisData.startDate}{analysisData.endDate ? ` ~ ${analysisData.endDate}` : ''}</p></div>
                 <div className="p-4 bg-orange-50 rounded-xl"><div className="flex items-center gap-2 text-orange-600 mb-2"><FileText size={20} /><span className="font-medium">분석 교재</span></div><p className="text-2xl font-bold text-orange-800">{analysisData.totalRecords}권</p></div>
                 <div className="p-4 bg-red-50 rounded-xl"><div className="flex items-center gap-2 text-red-600 mb-2"><Target size={20} /><span className="font-medium">총 오답</span></div><p className="text-2xl font-bold text-red-800">{analysisData.totalWrong}문제</p></div>
               </div>

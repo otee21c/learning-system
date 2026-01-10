@@ -155,23 +155,23 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
     }
   };
 
-  // ★ 학생별 과제 코드 체크 여부 (전체 현황용)
+  // ★ 학생별 과제 코드 체크 여부 (전체 현황용) - week/round 둘 다 호환
   const hasTaskCodeInOverview = (studentId, taskCode) => {
     return allSubmissions.some(s => 
       s.studentId === studentId && 
       s.month === overviewMonth && 
-      s.round === overviewRound &&
+      (s.round === overviewRound || s.week === overviewRound) &&
       s.taskCode === taskCode
     );
   };
 
-  // ★ 과제 코드 토글 (전체 현황에서)
+  // ★ 과제 코드 토글 (전체 현황에서) - week/round 둘 다 호환
   const toggleTaskCodeInOverview = async (studentId, taskCode) => {
     try {
       const existing = allSubmissions.find(s => 
         s.studentId === studentId && 
         s.month === overviewMonth && 
-        s.round === overviewRound &&
+        (s.round === overviewRound || s.week === overviewRound) &&
         s.taskCode === taskCode
       );
       
