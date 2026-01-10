@@ -211,11 +211,12 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
 
   const getFilteredAssignments = () => {
     return assignments.filter(a => {
-      // 유형 필터: 'all'이면 전체 (기존 과제는 homeworkType 없으면 모두 표시)
+      // 유형 필터
       if (typeFilter !== 'all') {
-        const assignmentType = a.homeworkType || null;
-        // homeworkType이 없는 기존 과제는 '전체'에서만 보임
-        if (assignmentType !== typeFilter) return false;
+        const assignmentType = a.homeworkType;
+        // homeworkType이 있는 경우만 필터 적용
+        if (assignmentType && assignmentType !== typeFilter) return false;
+        // homeworkType이 없는 기존 과제는 모든 탭에서 표시
       }
       
       // 월/차수는 schedules 기준으로 계산
@@ -578,14 +579,18 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
                           <th className="px-3 py-2 text-left">학생</th>
                           <th className="px-3 py-2 text-center">제출</th>
                           <th className="px-3 py-2 text-center">확인</th>
-                          <th className="px-3 py-2 text-center">이미지</th>
+                          <th className="px-3 py-2 text-center">파일</th>
                         </tr>
                       </thead>
                       <tbody>
                         {students.map(student => {
                           const submission = submissions.find(s => s.studentId === student.id || s.studentName === student.name);
-                          const hasSubmitted = submission?.submitted || submission?.imageUrl;
+                          // files 배열 또는 imageUrl 체크
+                          const hasFiles = submission?.files?.length > 0 || submission?.imageUrl;
+                          const hasSubmitted = submission?.submitted || hasFiles;
                           const isLate = hasSubmitted && isLateSubmission(selectedAssignment.dueDate, submission?.submittedAt);
+                          // 첫 번째 이미지 URL 가져오기
+                          const firstImageUrl = submission?.files?.[0]?.url || submission?.imageUrl;
                           return (
                             <tr key={student.id} className="border-t hover:bg-gray-50">
                               <td className="px-3 py-2"><input type="checkbox" checked={selectedStudents.includes(student.id)} onChange={() => toggleStudentSelection(student.id)} /></td>
@@ -601,7 +606,12 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
                                 </select>
                               </td>
                               <td className="px-3 py-2 text-center">
-                                {submission?.imageUrl ? <a href={submission.imageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600"><Image size={16} className="inline" /></a> : '-'}
+                                {hasFiles ? (
+                                  <a href={firstImageUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600">
+                                    <Image size={16} className="inline" />
+                                    {submission?.files?.length > 1 && <span className="text-xs ml-1">+{submission.files.length - 1}</span>}
+                                  </a>
+                                ) : '-'}
                               </td>
                             </tr>
                           );
@@ -609,21 +619,32 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
                       </tbody>
                     </table>
                   </div>
-                  {submissions.filter(s => s.imageUrl).length > 0 && (
+                  {/* 제출 이미지 갤러리 - files 배열 지원 */}
+                  {submissions.some(s => s.files?.length > 0 || s.imageUrl) && (
                     <div className="mt-4">
-                      <h4 className="font-medium text-gray-700 mb-3">🖼️ 제출 이미지</h4>
+                      <h4 className="font-medium text-gray-700 mb-3">🖼️ 제출 파일</h4>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {submissions.filter(s => s.imageUrl).map(sub => (
-                          <div key={sub.id} className="relative group">
-                            <a href={sub.imageUrl} target="_blank" rel="noopener noreferrer">
-                              <img src={sub.imageUrl} alt={sub.studentName} className="w-full h-32 object-cover rounded-lg border" />
-                            </a>
-                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 rounded-b-lg">
-                              {sub.studentName}
-                              {isLateSubmission(selectedAssignment.dueDate, sub.submittedAt) && <span className="ml-1 text-yellow-300">⏰</span>}
+                        {submissions.filter(s => s.files?.length > 0 || s.imageUrl).map(sub => {
+                          // files 배열이 있으면 각 파일 표시
+                          const files = sub.files || (sub.imageUrl ? [{ url: sub.imageUrl }] : []);
+                          return files.map((file, idx) => (
+                            <div key={`${sub.id}-${idx}`} className="relative group">
+                              <a href={file.url} target="_blank" rel="noopener noreferrer">
+                                {file.type?.includes('pdf') ? (
+                                  <div className="w-full h-32 bg-red-100 rounded-lg border flex items-center justify-center">
+                                    <span className="text-red-600 font-bold">PDF</span>
+                                  </div>
+                                ) : (
+                                  <img src={file.url} alt={sub.studentName} className="w-full h-32 object-cover rounded-lg border" />
+                                )}
+                              </a>
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 rounded-b-lg">
+                                {sub.studentName}
+                                {isLateSubmission(selectedAssignment.dueDate, sub.submittedAt) && <span className="ml-1 text-yellow-300">⏰</span>}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ));
+                        }).flat()}
                       </div>
                     </div>
                   )}

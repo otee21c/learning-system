@@ -740,7 +740,7 @@ const StudentDashboard = ({ students = [], branch, schedules = [] }) => {
           <div className="flex items-center gap-2">
             <select
               value={selectedRound}
-              onChange={(e) => setSelectedWeek(Number(e.target.value))}
+              onChange={(e) => setSelectedRound(Number(e.target.value))}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
               {[1,2,3,4,5].map(w => (
