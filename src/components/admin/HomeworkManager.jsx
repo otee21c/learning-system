@@ -106,9 +106,25 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
 
   const loadSubmissions = async (assignmentId) => {
     try {
+      const assignment = assignments.find(a => a.id === assignmentId);
       const q = query(collection(db, 'homeworkSubmissions'), orderBy('submittedAt', 'desc'));
       const snapshot = await getDocs(q);
-      setSubmissions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(sub => sub.homeworkId === assignmentId));
+      const allSubs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // homeworkId, assignmentId, 또는 같은 월/차수+taskCode로 매칭
+      const filtered = allSubs.filter(sub => {
+        // 직접 ID 매칭
+        if (sub.homeworkId === assignmentId || sub.assignmentId === assignmentId) return true;
+        // taskCode + 월/차수 매칭
+        if (assignment?.taskCode && sub.taskCode === assignment.taskCode) {
+          const subRound = sub.round || sub.week;
+          const assignRound = assignment.round || assignment.week;
+          if (sub.month === assignment.month && subRound === assignRound) return true;
+        }
+        return false;
+      });
+      
+      setSubmissions(filtered);
     } catch (error) { console.error('제출 기록 불러오기 실패:', error); }
   };
 
@@ -166,7 +182,11 @@ const HomeworkManager = ({ students: propStudents = [], branch, schedules = [] }
 
   const getFilteredAssignments = () => {
     return assignments.filter(a => {
-      if (typeFilter !== 'all' && a.homeworkType !== typeFilter) return false;
+      // 유형 필터: 'all'이면 전체, 아니면 해당 유형만 (기존 과제는 homeworkType이 없으면 전체에 포함)
+      if (typeFilter !== 'all') {
+        const assignmentType = a.homeworkType || 'other'; // 기존 과제는 'other'로 처리
+        if (assignmentType !== typeFilter) return false;
+      }
       if (monthFilter && a.month !== monthFilter) return false;
       if (roundFilter > 0 && a.round !== roundFilter && a.week !== roundFilter) return false;
       return true;
