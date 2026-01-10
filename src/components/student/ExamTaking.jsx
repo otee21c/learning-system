@@ -142,48 +142,81 @@ export default function ExamTaking({ currentUser, exams }) {
     
     let totalCorrect = 0;
     let totalWrong = 0;
+    let totalAnswered = 0;
     const wrongQuestions = [];
     const analyzedTypes = {};
 
     // 공통 문제 (1-34)
     for (let i = 1; i <= 34; i++) {
-      const question = questions[i];
+      const question = questions[i] || questions[String(i)];
       const studentAns = workbookAnswers[i - 1];
       const correctAns = question?.answer;
 
-      if (correctAns && studentAns) {
-        if (studentAns === correctAns) {
-          totalCorrect++;
-        } else {
-          totalWrong++;
-          wrongQuestions.push(i);
-          const type = question.type || '미분류';
-          analyzedTypes[type] = (analyzedTypes[type] || 0) + 1;
+      if (studentAns && studentAns !== 0) {
+        totalAnswered++;
+        if (correctAns) {
+          if (studentAns === correctAns) {
+            totalCorrect++;
+          } else {
+            totalWrong++;
+            wrongQuestions.push(i);
+            const type = question.type || '미분류';
+            const fullType = question.subType ? `${question.type}-${question.subType}` : type;
+            analyzedTypes[fullType] = (analyzedTypes[fullType] || 0) + 1;
+          }
         }
       }
     }
 
     // 선택과목 문제 (35-45)
-    const selectionStart = 35;
-    for (let i = selectionStart; i <= workbook.totalQuestions; i++) {
-      const question = questions[i];
-      if (!question) continue;
-      
-      // 학생이 선택한 선택과목과 일치하는 문제만
-      const questionSelection = question.selection || studentSelection;
-      if (questionSelection !== studentSelection) continue;
+    if (workbook.hasSelection) {
+      for (let i = 35; i <= workbook.totalQuestions; i++) {
+        // 선택과목 키로 찾기 (예: "35_화작", "35_언매")
+        const selectionKey = `${i}_${studentSelection}`;
+        const question = questions[selectionKey] || questions[String(selectionKey)];
+        
+        if (!question) continue;
 
-      const studentAns = workbookAnswers[i - 1];
-      const correctAns = question.answer;
+        const studentAns = workbookAnswers[i - 1];
+        const correctAns = question.answer;
 
-      if (correctAns && studentAns) {
-        if (studentAns === correctAns) {
-          totalCorrect++;
-        } else {
-          totalWrong++;
-          wrongQuestions.push(i);
-          const type = question.type || '미분류';
-          analyzedTypes[type] = (analyzedTypes[type] || 0) + 1;
+        if (studentAns && studentAns !== 0) {
+          totalAnswered++;
+          if (correctAns) {
+            if (studentAns === correctAns) {
+              totalCorrect++;
+            } else {
+              totalWrong++;
+              wrongQuestions.push(i);
+              const type = studentSelection; // 화작 또는 언매
+              const fullType = question.subType ? `${type}-${question.subType}` : type;
+              analyzedTypes[fullType] = (analyzedTypes[fullType] || 0) + 1;
+            }
+          }
+        }
+      }
+    } else {
+      // 선택과목 분리 안 된 경우
+      for (let i = 35; i <= workbook.totalQuestions; i++) {
+        const question = questions[i] || questions[String(i)];
+        if (!question) continue;
+
+        const studentAns = workbookAnswers[i - 1];
+        const correctAns = question.answer;
+
+        if (studentAns && studentAns !== 0) {
+          totalAnswered++;
+          if (correctAns) {
+            if (studentAns === correctAns) {
+              totalCorrect++;
+            } else {
+              totalWrong++;
+              wrongQuestions.push(i);
+              const type = question.type || '미분류';
+              const fullType = question.subType ? `${question.type}-${question.subType}` : type;
+              analyzedTypes[fullType] = (analyzedTypes[fullType] || 0) + 1;
+            }
+          }
         }
       }
     }
@@ -193,6 +226,7 @@ export default function ExamTaking({ currentUser, exams }) {
       workbookName: workbook.name,
       totalCorrect,
       totalWrong,
+      totalAnswered,
       wrongQuestions,
       analyzedTypes,
       selection: studentSelection,
@@ -480,41 +514,53 @@ export default function ExamTaking({ currentUser, exams }) {
         ) : (
           // 채점 결과
           <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 bg-green-50 rounded-xl text-center">
-                <p className="text-3xl font-bold text-green-600">{workbookResult.totalCorrect}</p>
-                <p className="text-sm text-green-700">정답</p>
+            {workbookResult.totalAnswered === 0 ? (
+              <div className="p-6 bg-yellow-50 rounded-xl text-center">
+                <p className="text-lg font-bold text-yellow-800 mb-2">⚠️ 채점할 수 없습니다</p>
+                <p className="text-yellow-700">교재에 정답이 등록되지 않았거나, 답을 입력하지 않았습니다.</p>
+                <p className="text-sm text-yellow-600 mt-2">관리자에게 문의하세요.</p>
               </div>
-              <div className="p-4 bg-red-50 rounded-xl text-center">
-                <p className="text-3xl font-bold text-red-600">{workbookResult.totalWrong}</p>
-                <p className="text-sm text-red-700">오답</p>
-              </div>
-              <div className="p-4 bg-blue-50 rounded-xl text-center">
-                <p className="text-3xl font-bold text-blue-600">
-                  {((workbookResult.totalCorrect / (workbookResult.totalCorrect + workbookResult.totalWrong)) * 100).toFixed(0)}%
-                </p>
-                <p className="text-sm text-blue-700">정답률</p>
-              </div>
-            </div>
-
-            {workbookResult.wrongQuestions.length > 0 && (
-              <div className="p-4 bg-red-50 rounded-xl">
-                <h4 className="font-bold text-red-800 mb-2">틀린 문제</h4>
-                <p className="text-red-700">{workbookResult.wrongQuestions.join(', ')}번</p>
-              </div>
-            )}
-
-            {Object.keys(workbookResult.analyzedTypes).length > 0 && (
-              <div className="p-4 bg-orange-50 rounded-xl">
-                <h4 className="font-bold text-orange-800 mb-2">유형별 오답</h4>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(workbookResult.analyzedTypes).map(([type, count]) => (
-                    <span key={type} className="px-3 py-1 bg-orange-200 text-orange-800 rounded-full text-sm">
-                      {type}: {count}개
-                    </span>
-                  ))}
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-green-50 rounded-xl text-center">
+                    <p className="text-3xl font-bold text-green-600">{workbookResult.totalCorrect}</p>
+                    <p className="text-sm text-green-700">정답</p>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-xl text-center">
+                    <p className="text-3xl font-bold text-red-600">{workbookResult.totalWrong}</p>
+                    <p className="text-sm text-red-700">오답</p>
+                  </div>
+                  <div className="p-4 bg-blue-50 rounded-xl text-center">
+                    <p className="text-3xl font-bold text-blue-600">
+                      {workbookResult.totalCorrect + workbookResult.totalWrong > 0 
+                        ? ((workbookResult.totalCorrect / (workbookResult.totalCorrect + workbookResult.totalWrong)) * 100).toFixed(0) 
+                        : 0}%
+                    </p>
+                    <p className="text-sm text-blue-700">정답률</p>
+                  </div>
                 </div>
-              </div>
+
+                {workbookResult.wrongQuestions.length > 0 && (
+                  <div className="p-4 bg-red-50 rounded-xl">
+                    <h4 className="font-bold text-red-800 mb-2">틀린 문제</h4>
+                    <p className="text-red-700">{workbookResult.wrongQuestions.join(', ')}번</p>
+                  </div>
+                )}
+
+                {Object.keys(workbookResult.analyzedTypes).length > 0 && (
+                  <div className="p-4 bg-orange-50 rounded-xl">
+                    <h4 className="font-bold text-orange-800 mb-2">유형별 오답</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(workbookResult.analyzedTypes).map(([type, count]) => (
+                        <span key={type} className="px-3 py-1 bg-orange-200 text-orange-800 rounded-full text-sm">
+                          {type}: {count}개
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             <button

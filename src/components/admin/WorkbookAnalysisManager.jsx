@@ -330,6 +330,10 @@ export default function WorkbookAnalysisManager({ students, branch }) {
                 {commonQuestions.sort((a, b) => Number(a) - Number(b)).map(num => (
                   <div key={num} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
                     <span className="w-8 text-center font-medium text-gray-700">{num}번</span>
+                    <select value={newWorkbook.questions[num]?.answer || ''} onChange={(e) => updateQuestionType(num, 'answer', parseInt(e.target.value) || '')} className="w-12 px-1 py-1 border-2 border-green-400 rounded text-sm font-bold text-center bg-green-50">
+                      <option value="">정답</option>
+                      {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
                     <select value={newWorkbook.questions[num]?.type || ''} onChange={(e) => updateQuestionType(num, 'type', e.target.value)} className="flex-1 px-2 py-1 border rounded text-sm">
                       <option value="">유형 선택</option>
                       {Object.keys(TYPE_CATEGORIES).filter(t => !['화작', '언매'].includes(t)).map(type => (<option key={type} value={type}>{type}</option>))}
@@ -354,6 +358,10 @@ export default function WorkbookAnalysisManager({ students, branch }) {
                   return (
                     <div key={key} className="flex items-center gap-2 p-2 bg-white rounded-lg">
                       <span className="w-8 text-center font-medium text-orange-700">{num}번</span>
+                      <select value={newWorkbook.questions[key]?.answer || ''} onChange={(e) => updateQuestionType(key, 'answer', parseInt(e.target.value) || '')} className="w-12 px-1 py-1 border-2 border-green-400 rounded text-sm font-bold text-center bg-green-50">
+                        <option value="">정답</option>
+                        {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
                       <select value={newWorkbook.questions[key]?.subType || ''} onChange={(e) => updateQuestionType(key, 'subType', e.target.value)} className="flex-1 px-2 py-1 border border-orange-300 rounded text-sm">
                         <option value="">세부유형</option>
                         {TYPE_CATEGORIES['화작'].map(sub => <option key={sub} value={sub}>{sub}</option>)}
@@ -375,6 +383,10 @@ export default function WorkbookAnalysisManager({ students, branch }) {
                   return (
                     <div key={key} className="flex items-center gap-2 p-2 bg-white rounded-lg">
                       <span className="w-8 text-center font-medium text-pink-700">{num}번</span>
+                      <select value={newWorkbook.questions[key]?.answer || ''} onChange={(e) => updateQuestionType(key, 'answer', parseInt(e.target.value) || '')} className="w-12 px-1 py-1 border-2 border-green-400 rounded text-sm font-bold text-center bg-green-50">
+                        <option value="">정답</option>
+                        {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
                       <select value={newWorkbook.questions[key]?.subType || ''} onChange={(e) => updateQuestionType(key, 'subType', e.target.value)} className="flex-1 px-2 py-1 border border-pink-300 rounded text-sm">
                         <option value="">세부유형</option>
                         {TYPE_CATEGORIES['언매'].map(sub => <option key={sub} value={sub}>{sub}</option>)}
@@ -455,8 +467,8 @@ export default function WorkbookAnalysisManager({ students, branch }) {
                 </div>
                 {editingWorkbook === workbook.id && (
                   <div className="mt-4 pt-4 border-t">
-                    <h5 className="font-medium text-gray-700 mb-2">문제별 유형</h5>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">{Object.entries(workbook.questions || {}).map(([key, info]) => (<div key={key} className="text-sm p-2 bg-gray-50 rounded"><span className="font-medium">{key.replace('_', ' ')}:</span> <span className={(TYPE_COLORS[info.type] || '') + ' px-1 rounded'}>{info.subType || info.type || '미지정'}</span></div>))}</div>
+                    <h5 className="font-medium text-gray-700 mb-2">문제별 정답 및 유형</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">{Object.entries(workbook.questions || {}).map(([key, info]) => (<div key={key} className="text-sm p-2 bg-gray-50 rounded"><span className="font-medium">{key.replace('_', ' ')}:</span> {info.answer && <span className="bg-green-200 text-green-800 px-1.5 py-0.5 rounded font-bold mr-1">{info.answer}</span>}<span className={(TYPE_COLORS[info.type] || '') + ' px-1 rounded'}>{info.subType || info.type || '미지정'}</span></div>))}</div>
                   </div>
                 )}
               </div>
